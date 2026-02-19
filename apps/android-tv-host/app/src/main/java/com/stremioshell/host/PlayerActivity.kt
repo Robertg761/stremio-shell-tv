@@ -4,9 +4,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioManager
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -31,6 +34,7 @@ class PlayerActivity : AppCompatActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     setContentView(R.layout.activity_player)
+    volumeControlStream = AudioManager.STREAM_MUSIC
 
     playerView = findViewById(R.id.playerView)
 
@@ -82,6 +86,14 @@ class PlayerActivity : AppCompatActivity() {
     val exoPlayer = ExoPlayer.Builder(this).build()
     player = exoPlayer
     playerView.player = exoPlayer
+    exoPlayer.setAudioAttributes(
+      AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA)
+        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+        .build(),
+      true
+    )
+    exoPlayer.volume = 1f
 
     exoPlayer.addListener(object : Player.Listener {
       override fun onIsPlayingChanged(isPlaying: Boolean) {

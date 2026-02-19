@@ -4,6 +4,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -41,6 +44,7 @@ class MainActivity : AppCompatActivity() {
   private lateinit var webView: WebView
   private lateinit var networkMonitor: NetworkMonitor
   private lateinit var assetLoader: WebViewAssetLoader
+  private lateinit var audioManager: AudioManager
   private lateinit var startupOverlay: LinearLayout
   private lateinit var startupProgress: ProgressBar
   private lateinit var startupTitle: TextView
@@ -52,6 +56,17 @@ class MainActivity : AppCompatActivity() {
   private val bridgeName = "stremioHost"
   private val localShellUrl = "https://appassets.androidplatform.net/assets/web/index.html"
   private val startupHandler = Handler(Looper.getMainLooper())
+  private val audioFocusRequest by lazy {
+    AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+      .setAudioAttributes(
+        AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_MEDIA)
+          .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+          .build()
+      )
+      .setOnAudioFocusChangeListener {}
+      .build()
+  }
 
   private var webReady = false
   private var startupCompleted = false
@@ -86,6 +101,8 @@ class MainActivity : AppCompatActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     setContentView(R.layout.activity_main)
+    audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    volumeControlStream = AudioManager.STREAM_MUSIC
 
     webView = findViewById(R.id.webView)
     startupOverlay = findViewById(R.id.startupOverlay)
@@ -131,11 +148,15 @@ class MainActivity : AppCompatActivity() {
 
   override fun onResume() {
     super.onResume()
+    requestAudioFocus()
+    applyWebMediaAudioGuard()
+    appendAudioStateDiagnostic("onResume")
     emitLifecycle("resumed")
   }
 
   override fun onPause() {
     emitLifecycle("paused")
+    abandonAudioFocus()
     super.onPause()
   }
 
@@ -147,6 +168,7 @@ class MainActivity : AppCompatActivity() {
 
   override fun onDestroy() {
     startupHandler.removeCallbacksAndMessages(null)
+    abandonAudioFocus()
     emitLifecycle("destroyed")
     unregisterReceiver(playbackEventReceiver)
     webView.removeJavascriptInterface(bridgeName)
@@ -186,6 +208,7 @@ class MainActivity : AppCompatActivity() {
         appendDiagnostic("onPageFinished source=$shellSource url=$url")
         webReady = true
         flushPendingEvents()
+        applyWebMediaAudioGuard()
         probeForRenderedContent()
       }
 
@@ -549,6 +572,55 @@ class MainActivity : AppCompatActivity() {
         window.dispatchEvent(new CustomEvent('${HostBridgeContract.HOST_EVENT_NAME}', { detail }));
       })();
     """.trimIndent()
+    webView.evaluateJavascript(script, null)
+  }
+
+  private fun requestAudioFocus() {
+    val result = audioManager.requestAudioFocus(audioFocusRequest)
+    appendDiagnostic("Audio focus request result=$result.")
+  }
+
+  private fun abandonAudioFocus() {
+    audioManager.abandonAudioFocusRequest(audioFocusRequest)
+  }
+
+  private fun appendAudioStateDiagnostic(source: String) {
+    val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+    val muted = audioManager.isStreamMute(AudioManager.STREAM_MUSIC)
+    appendDiagnostic("Audio state $source stream=music volume=$current/$max muted=$muted.")
+  }
+
+  private fun applyWebMediaAudioGuard() {
+    val script = """
+      (() => {
+        const apply = (media) => {
+          if (!(media instanceof HTMLMediaElement)) return;
+          media.defaultMuted = false;
+          media.muted = false;
+          if (typeof media.volume === 'number' && media.volume === 0) {
+            media.volume = 1;
+          }
+        };
+
+        const syncAll = () => {
+          document.querySelectorAll('video, audio').forEach(apply);
+        };
+
+        syncAll();
+
+        if (!window.__stremioAudioGuardInstalled) {
+          window.__stremioAudioGuardInstalled = true;
+          const observer = new MutationObserver(syncAll);
+          observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
+          setInterval(syncAll, 1500);
+          ['click', 'keydown', 'touchend'].forEach((evt) => {
+            window.addEventListener(evt, syncAll, { passive: true });
+          });
+        }
+      })();
+    """.trimIndent()
+
     webView.evaluateJavascript(script, null)
   }
 }
