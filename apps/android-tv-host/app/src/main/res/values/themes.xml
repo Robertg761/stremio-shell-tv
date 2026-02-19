@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <style name="Theme.StremioShell" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <item name="colorPrimary">@color/stremio_green</item>
+    <item name="colorOnPrimary">@android:color/white</item>
+    <item name="android:windowBackground">@android:color/black</item>
+  </style>
+
+  <style name="Theme.StremioShell.NoActionBar" parent="Theme.StremioShell">
+    <item name="windowNoTitle">true</item>
+    <item name="windowActionBar">false</item>
+  </style>
+</resources>

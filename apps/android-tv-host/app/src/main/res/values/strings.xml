@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">Stremio Shell</string>
+  <string name="export_diagnostics_title">Export diagnostics</string>
+</resources>

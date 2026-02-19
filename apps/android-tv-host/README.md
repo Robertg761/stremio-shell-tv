@@ -1,6 +1,6 @@
 # Android + Google TV Host
 
-This folder defines the Android/Google TV host track. It intentionally starts as a thin host because the shared shell logic lives in `apps/web`.
+This folder now contains a functional Android host app that supports both phone/tablet (`mobile`) and Android TV (`tv`) variants from one codebase.
 
 ## Host bridge contract
 
@@ -18,13 +18,55 @@ Use `apps/android-tv-host/host-bridge-contract.json` as the source of truth for 
 4. Map native lifecycle and connectivity events into JS host bridge.
 5. Integrate playback handoff to ExoPlayer or native media APIs.
 
-## Suggested first execution step
+## What is implemented
 
-Generate the native project once Android SDK/JDK paths are finalized:
+- `mobile` and `tv` product flavors, producing two installable apps:
+  - `com.stremioshell.host.mobile`
+  - `com.stremioshell.host.tv`
+- Full-screen WebView host loading:
+  - Debug: `http://10.0.2.2:5173` (falls back to bundled assets if unavailable).
+  - Release: bundled `apps/web/dist` assets.
+- JS bridge command support:
+  - `playback.open`
+  - `playback.close`
+  - `external.openUrl`
+  - `diagnostics.export`
+- Host event dispatch to web shell:
+  - `lifecycle.changed`
+  - `network.changed`
+  - `back.pressed`
+  - `deepLink.received`
+  - `playback.result`
+- Native playback path via Media3 ExoPlayer.
+
+## Build and run
+
+Prerequisites:
+
+- Android SDK installed and `ANDROID_HOME` set.
+- JDK 17 installed.
+- Web shell built (`apps/web/dist`).
+
+Build steps:
 
 ```powershell
-# example next step (not run by default)
-# npx @capacitor/cli create apps/android-tv-host com.yourorg.stremioshell "Stremio Shell"
+# 1) Build web assets used by Android release/debug fallback
+pnpm --filter @stremio-shell/web build
+
+# 2) Build Android variants
+cd apps/android-tv-host
+.\gradlew.bat :app:assembleMobileDebug
+.\gradlew.bat :app:assembleTvDebug
 ```
 
-Track delivery tasks in `docs/roadmap.md` Milestone 1 and 2.
+Install to connected device/emulator:
+
+```powershell
+.\gradlew.bat :app:installMobileDebug
+.\gradlew.bat :app:installTvDebug
+```
+
+## Flavor behavior
+
+- `mobile` flavor has standard launcher category.
+- `tv` flavor has Leanback launcher category and TV banner.

@@ -5,7 +5,7 @@ type HostEventListener = (event: HostEvent) => void;
 declare global {
   interface Window {
     stremioHost?: {
-      sendCommand: (command: HostCommand) => void;
+      sendCommand: (commandJson: string) => void;
     };
   }
 }
@@ -27,8 +27,10 @@ export function subscribeToHostEvents(listener: HostEventListener): () => void {
 }
 
 export function sendHostCommand(command: HostCommand): void {
+  const commandJson = JSON.stringify(command);
+
   if (window.stremioHost) {
-    window.stremioHost.sendCommand(command);
+    window.stremioHost.sendCommand(commandJson);
     return;
   }
 

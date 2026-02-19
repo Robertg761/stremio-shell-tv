@@ -19,6 +19,19 @@ pnpm dev
 
 Open the web shell at `http://localhost:5173`.
 
+## Android builds (mobile + TV)
+
+```powershell
+pnpm android:web-build
+pnpm android:mobile:assemble
+pnpm android:tv:assemble
+```
+
+Install artifacts with:
+
+- `apps/android-tv-host\app\build\outputs\apk\mobile\debug\app-mobile-debug.apk`
+- `apps/android-tv-host\app\build\outputs\apk\tv\debug\app-tv-debug.apk`
+
 ## Using your local stremio-core fork
 
 This repo is designed to consume either:

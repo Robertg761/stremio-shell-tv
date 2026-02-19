@@ -9,6 +9,9 @@
     "dev": "turbo run dev --parallel",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
+    "android:web-build": "pnpm --filter @stremio-shell/web build",
+    "android:mobile:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleMobileDebug\"",
+    "android:tv:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleTvDebug\"",
     "core:use-npm": "pnpm --filter @stremio-shell/core-bridge add @stremio/stremio-core-web@latest",
     "core:use-local": "powershell -ExecutionPolicy Bypass -File scripts/use-local-core.ps1"
   },
