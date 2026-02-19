@@ -40,7 +40,7 @@ android {
 
   buildTypes {
     debug {
-      buildConfigField("String", "WEB_APP_URL", "\"http://10.0.2.2:5173\"")
+      buildConfigField("String", "WEB_APP_URL", "\"\"")
     }
     release {
       isMinifyEnabled = false

@@ -6,24 +6,35 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
+import android.webkit.ConsoleMessage
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
+import android.webkit.WebResourceResponse
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.webkit.WebViewAssetLoader
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
+  companion object {
+    private const val TAG = "StremioHost"
+  }
+
   private lateinit var webView: WebView
   private lateinit var networkMonitor: NetworkMonitor
+  private lateinit var assetLoader: WebViewAssetLoader
 
   private val bridgeName = "stremioHost"
-  private val localShellUrl = "file:///android_asset/web/index.html"
+  private val localShellUrl = "https://appassets.androidplatform.net/assets/web/index.html"
 
   private var webReady = false
   private var attemptedDebugFallback = false
@@ -97,6 +108,10 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun configureWebView() {
+    assetLoader = WebViewAssetLoader.Builder()
+      .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+      .build()
+
     with(webView.settings) {
       javaScriptEnabled = true
       domStorageEnabled = true
@@ -104,8 +119,22 @@ class MainActivity : AppCompatActivity() {
       allowFileAccess = true
     }
 
+    webView.webChromeClient = object : WebChromeClient() {
+      override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+        Log.d(
+          TAG,
+          "WebConsole ${consoleMessage.messageLevel()} ${consoleMessage.sourceId()}:${consoleMessage.lineNumber()} ${consoleMessage.message()}"
+        )
+        return true
+      }
+    }
+
     webView.addJavascriptInterface(WebCommandBridge(::handleCommandFromWeb), bridgeName)
     webView.webViewClient = object : WebViewClient() {
+      override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+        return assetLoader.shouldInterceptRequest(request.url)
+      }
+
       override fun onPageFinished(view: WebView?, url: String?) {
         webReady = true
         flushPendingEvents()
@@ -114,9 +143,13 @@ class MainActivity : AppCompatActivity() {
       override fun onReceivedError(
         view: WebView?,
         request: WebResourceRequest?,
-        error: android.webkit.WebResourceError?
+        error: WebResourceError?
       ) {
         val isMainFrame = request?.isForMainFrame == true
+        Log.e(
+          TAG,
+          "WebView load error mainFrame=$isMainFrame code=${error?.errorCode} description=${error?.description} url=${request?.url}"
+        )
         if (!isMainFrame) {
           return
         }
