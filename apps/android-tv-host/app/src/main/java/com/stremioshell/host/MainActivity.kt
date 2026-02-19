@@ -14,6 +14,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.webkit.ConsoleMessage
+import android.webkit.WebSettings
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceError
 import android.webkit.WebResourceResponse
@@ -29,6 +30,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewAssetLoader
+import java.io.ByteArrayInputStream
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.text.SimpleDateFormat
@@ -39,6 +41,7 @@ class MainActivity : AppCompatActivity() {
   companion object {
     private const val TAG = "StremioHost"
     private const val STARTUP_TIMEOUT_MS = 12000L
+    private const val LOCAL_STREAMING_PORT = 11470
   }
 
   private lateinit var webView: WebView
@@ -74,6 +77,8 @@ class MainActivity : AppCompatActivity() {
   private var usingLocalDebugServer = false
   private var attemptedDebugFallback = false
   private var attemptedRemoteFallback = false
+  private var lastNativePlaybackUrl: String? = null
+  private var lastNativePlaybackAtMs: Long = 0L
   private val pendingEvents = mutableListOf<String>()
   private val diagnostics = ArrayDeque<String>()
   private val startupTimeoutRunnable = Runnable {
@@ -186,6 +191,7 @@ class MainActivity : AppCompatActivity() {
       domStorageEnabled = true
       mediaPlaybackRequiresUserGesture = false
       allowFileAccess = true
+      mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
     }
 
     webView.webChromeClient = object : WebChromeClient() {
@@ -200,13 +206,21 @@ class MainActivity : AppCompatActivity() {
 
     webView.addJavascriptInterface(WebCommandBridge(::handleCommandFromWeb), bridgeName)
     webView.webViewClient = object : WebViewClient() {
+      override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+        val target = extractLocalStreamingTarget(request.url) ?: return false
+        maybeOpenNativePlaybackFromStreamingServer(target.streamId, target.mediaUrl, request.url.toString())
+        return true
+      }
+
       override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+        interceptStreamingServerRequest(request.url)?.let { return it }
         return assetLoader.shouldInterceptRequest(request.url)
       }
 
       override fun onPageFinished(view: WebView?, url: String?) {
         appendDiagnostic("onPageFinished source=$shellSource url=$url")
         webReady = true
+        installPlaybackHandoffShim()
         flushPendingEvents()
         applyWebMediaAudioGuard()
         probeForRenderedContent()
@@ -570,6 +584,227 @@ class MainActivity : AppCompatActivity() {
       (() => {
         const detail = JSON.parse($escaped);
         window.dispatchEvent(new CustomEvent('${HostBridgeContract.HOST_EVENT_NAME}', { detail }));
+      })();
+    """.trimIndent()
+    webView.evaluateJavascript(script, null)
+  }
+
+  private fun interceptStreamingServerRequest(uri: Uri): WebResourceResponse? {
+    if (!isLocalStreamingServerRequest(uri)) {
+      return null
+    }
+
+    val target = extractLocalStreamingTarget(uri)
+    if (target != null) {
+      maybeOpenNativePlaybackFromStreamingServer(target.streamId, target.mediaUrl, uri.toString())
+      // Return a tiny valid manifest response so WebView does not hard-fail while native playback opens.
+      return createTextResponse("application/vnd.apple.mpegurl", "#EXTM3U\n")
+    }
+
+    val path = uri.path.orEmpty()
+    if (path == "/settings") {
+      val body = JSONObject()
+        .put("version", "android-host")
+        .put("serverVersion", "android-host")
+        .put("transcodeSupport", false)
+        .put("remoteHttps", false)
+      return createTextResponse("application/json", body.toString())
+    }
+
+    if (path == "/network-info") {
+      val body = JSONObject()
+        .put("connected", true)
+        .put("transport", "internet")
+      return createTextResponse("application/json", body.toString())
+    }
+
+    if (path == "/device-info") {
+      val body = JSONObject()
+        .put("platform", "android")
+        .put("isTv", BuildConfig.IS_TV)
+      return createTextResponse("application/json", body.toString())
+    }
+
+    if (path == "/casting") {
+      val body = JSONObject()
+        .put("available", false)
+        .put("devices", org.json.JSONArray())
+      return createTextResponse("application/json", body.toString())
+    }
+
+    return createTextResponse("application/json", "{}")
+  }
+
+  private data class StreamingTarget(
+    val mediaUrl: String,
+    val streamId: String?
+  )
+
+  private fun isLocalStreamingServerRequest(uri: Uri): Boolean {
+    val host = uri.host.orEmpty()
+    if (host != "127.0.0.1" && host != "localhost") {
+      return false
+    }
+    val port = uri.port
+    return port == -1 || port == LOCAL_STREAMING_PORT
+  }
+
+  private fun extractLocalStreamingTarget(uri: Uri): StreamingTarget? {
+    if (!isLocalStreamingServerRequest(uri)) {
+      return null
+    }
+
+    val path = uri.path.orEmpty()
+    val mediaUrl = sequenceOf("mediaURL", "mediaUrl", "url")
+      .mapNotNull { uri.getQueryParameter(it) }
+      .map { it.trim() }
+      .firstOrNull { it.isNotBlank() }
+      ?: return null
+
+    if (mediaUrl.startsWith("http://127.0.0.1:$LOCAL_STREAMING_PORT") || mediaUrl.startsWith("http://localhost:$LOCAL_STREAMING_PORT")) {
+      return null
+    }
+
+    return StreamingTarget(
+      mediaUrl = mediaUrl,
+      streamId = extractStreamIdFromHlsPath(path)
+    )
+  }
+
+  private fun maybeOpenNativePlaybackFromStreamingServer(streamId: String?, mediaUrl: String, sourceUrl: String) {
+    val now = System.currentTimeMillis()
+    if (lastNativePlaybackUrl == mediaUrl && now - lastNativePlaybackAtMs < 3000L) {
+      return
+    }
+
+    lastNativePlaybackUrl = mediaUrl
+    lastNativePlaybackAtMs = now
+
+    runOnUiThread {
+      val payload = JSONObject()
+        .put("url", mediaUrl)
+        .put("streamId", streamId ?: mediaUrl.hashCode().toString())
+      appendDiagnostic("Intercepted streaming request and opened native playback. source=$sourceUrl")
+      openPlayback(payload)
+    }
+  }
+
+  private fun extractStreamIdFromHlsPath(path: String): String? {
+    // Path format: /hlsv2/{stream-id}/master.m3u8
+    val segments = path.split('/').filter { it.isNotBlank() }
+    if (segments.size < 2) {
+      return null
+    }
+    if (segments[0] != "hlsv2") {
+      return null
+    }
+    return segments[1]
+  }
+
+  private fun createTextResponse(contentType: String, body: String): WebResourceResponse {
+    return WebResourceResponse(
+      contentType,
+      "utf-8",
+      200,
+      "OK",
+      mapOf(
+        "Access-Control-Allow-Origin" to "*",
+        "Access-Control-Allow-Methods" to "GET, OPTIONS",
+        "Access-Control-Allow-Headers" to "*",
+        "Cache-Control" to "no-store, no-cache, must-revalidate"
+      ),
+      ByteArrayInputStream(body.toByteArray(Charsets.UTF_8))
+    )
+  }
+
+  private fun installPlaybackHandoffShim() {
+    val script = """
+      (() => {
+        if (window.__stremioNativePlaybackShimInstalled) {
+          return;
+        }
+        window.__stremioNativePlaybackShimInstalled = true;
+
+        const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost']);
+        const LOCAL_PORT = '11470';
+        const extractTarget = (value) => {
+          if (!value) return null;
+          try {
+            const parsed = new URL(String(value), window.location.href);
+            if (!LOCAL_HOSTS.has(parsed.hostname)) return null;
+            if (parsed.port && parsed.port !== LOCAL_PORT) return null;
+            if (!parsed.pathname.startsWith('/hlsv2/')) return null;
+            const mediaUrl = parsed.searchParams.get('mediaURL') || parsed.searchParams.get('mediaUrl') || parsed.searchParams.get('url');
+            if (!mediaUrl) return null;
+            const segments = parsed.pathname.split('/').filter(Boolean);
+            return { mediaUrl, streamId: segments.length > 1 ? segments[1] : null };
+          } catch (_) {
+            return null;
+          }
+        };
+
+        const sendPlaybackOpen = (target) => {
+          if (!window.stremioHost || typeof window.stremioHost.sendCommand !== 'function') {
+            return;
+          }
+          const envelope = {
+            type: 'playback.open',
+            version: 1,
+            payload: {
+              url: target.mediaUrl,
+              streamId: target.streamId || undefined
+            },
+            timestampMs: Date.now()
+          };
+          window.stremioHost.sendCommand(JSON.stringify(envelope));
+        };
+
+        const maybeOpenNative = (value) => {
+          const target = extractTarget(value);
+          if (!target) return false;
+          sendPlaybackOpen(target);
+          return true;
+        };
+
+        const originalFetch = window.fetch ? window.fetch.bind(window) : null;
+        if (originalFetch) {
+          window.fetch = (input, init) => {
+            const candidate = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+            if (maybeOpenNative(candidate)) {
+              return Promise.resolve(new Response('#EXTM3U\n', {
+                status: 200,
+                headers: { 'content-type': 'application/vnd.apple.mpegurl' }
+              }));
+            }
+            return originalFetch(input, init);
+          };
+        }
+
+        const mediaSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+        if (mediaSrcDescriptor && typeof mediaSrcDescriptor.set === 'function' && typeof mediaSrcDescriptor.get === 'function') {
+          Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+            configurable: true,
+            enumerable: mediaSrcDescriptor.enumerable,
+            get() {
+              return mediaSrcDescriptor.get.call(this);
+            },
+            set(value) {
+              if (!maybeOpenNative(value)) {
+                mediaSrcDescriptor.set.call(this, value);
+              }
+            }
+          });
+        }
+
+        const originalSetAttribute = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function(name, value) {
+          if (this instanceof HTMLMediaElement && String(name).toLowerCase() === 'src') {
+            if (maybeOpenNative(value)) {
+              return;
+            }
+          }
+          return originalSetAttribute.call(this, name, value);
+        };
       })();
     """.trimIndent()
     webView.evaluateJavascript(script, null)
