@@ -9,6 +9,7 @@ Each milestone must pass all listed gates before the next milestone starts. A ga
 - CI health:
   - `pnpm typecheck` passes.
   - `pnpm build` passes.
+  - `pnpm test:contracts` passes.
 - No open P0 issues.
 - Documentation updated for any contract or behavior changes.
 

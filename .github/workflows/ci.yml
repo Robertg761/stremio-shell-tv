@@ -23,3 +23,5 @@ jobs:
         run: pnpm typecheck
       - name: Build
         run: pnpm build
+      - name: Contract tests
+        run: pnpm test:contracts

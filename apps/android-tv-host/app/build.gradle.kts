@@ -6,6 +6,11 @@ plugins {
   id("org.jetbrains.kotlin.android")
 }
 
+val debugWebAppUrl = (project.findProperty("webAppUrl") as String?)
+  ?.trim()
+  .orEmpty()
+  .ifBlank { "https://web.stremio.com/" }
+
 android {
   namespace = "com.stremioshell.host"
   compileSdk = 34
@@ -40,7 +45,8 @@ android {
 
   buildTypes {
     debug {
-      buildConfigField("String", "WEB_APP_URL", "\"\"")
+      buildConfigField("String", "WEB_APP_URL", "\"$debugWebAppUrl\"")
+      buildConfigField("String", "WEB_REMOTE_FALLBACK_URL", "\"https://web.stremio.com/\"")
     }
     release {
       isMinifyEnabled = false
@@ -49,6 +55,7 @@ android {
         "proguard-rules.pro"
       )
       buildConfigField("String", "WEB_APP_URL", "\"\"")
+      buildConfigField("String", "WEB_REMOTE_FALLBACK_URL", "\"https://web.stremio.com/\"")
     }
   }
 

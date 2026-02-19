@@ -2,4 +2,11 @@
 <resources>
   <string name="app_name">Stremio Shell</string>
   <string name="export_diagnostics_title">Export diagnostics</string>
+  <string name="startup_loading_title">Loading Stremio Shell</string>
+  <string name="startup_loading_message">Initializing web runtime and host bridge...</string>
+  <string name="startup_retry">Retry</string>
+  <string name="startup_timeout_title">Startup took too long</string>
+  <string name="startup_timeout_message">The shell did not render in time. You can retry or export diagnostics.</string>
+  <string name="startup_error_title">Startup failed</string>
+  <string name="startup_error_message">Could not load the shell UI. Falling back to bundled assets.</string>
 </resources>

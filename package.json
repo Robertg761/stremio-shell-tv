@@ -9,6 +9,8 @@
     "dev": "turbo run dev --parallel",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
+    "test:contracts": "pnpm --filter @stremio-shell/core-bridge build && node --test \"packages/core-bridge/test/*.test.mjs\"",
+    "upstream:sync": "powershell -ExecutionPolicy Bypass -File scripts/sync-upstream-stremio-web.ps1",
     "android:web-build": "pnpm --filter @stremio-shell/web build",
     "android:mobile:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleMobileDebug\"",
     "android:tv:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleTvDebug\"",

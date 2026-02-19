@@ -21,6 +21,12 @@ Open the web shell at `http://localhost:5173`.
 
 ## Android builds (mobile + TV)
 
+Set Android SDK/AVD paths to `G:` (current shell session):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup-android-env.ps1
+```
+
 ```powershell
 pnpm android:web-build
 pnpm android:mobile:assemble
@@ -31,6 +37,14 @@ Install artifacts with:
 
 - `apps/android-tv-host\app\build\outputs\apk\mobile\debug\app-mobile-debug.apk`
 - `apps/android-tv-host\app\build\outputs\apk\tv\debug\app-tv-debug.apk`
+
+## Upstream stremio-web sync
+
+```powershell
+pnpm upstream:sync
+```
+
+This syncs pinned upstream source into `vendor/stremio-web/source` and updates `vendor/stremio-web/VENDOR_METADATA.json`.
 
 ## Using your local stremio-core fork
 
@@ -60,3 +74,4 @@ Read these documents for execution governance:
 - `docs/contracts/host-bridge.md`
 - `docs/quality-gates.md`
 - `docs/project-tracking.md`
+- `docs/upstream-sync.md`

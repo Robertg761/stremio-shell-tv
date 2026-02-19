@@ -6,7 +6,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceError
@@ -14,12 +17,17 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewAssetLoader
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -27,19 +35,46 @@ import java.util.Locale
 class MainActivity : AppCompatActivity() {
   companion object {
     private const val TAG = "StremioHost"
+    private const val STARTUP_TIMEOUT_MS = 12000L
   }
 
   private lateinit var webView: WebView
   private lateinit var networkMonitor: NetworkMonitor
   private lateinit var assetLoader: WebViewAssetLoader
+  private lateinit var startupOverlay: LinearLayout
+  private lateinit var startupProgress: ProgressBar
+  private lateinit var startupTitle: TextView
+  private lateinit var startupMessage: TextView
+  private lateinit var startupActions: LinearLayout
+  private lateinit var retryButton: Button
+  private lateinit var exportDiagnosticsButton: Button
 
   private val bridgeName = "stremioHost"
   private val localShellUrl = "https://appassets.androidplatform.net/assets/web/index.html"
+  private val startupHandler = Handler(Looper.getMainLooper())
 
   private var webReady = false
+  private var startupCompleted = false
+  private var shellSource: String = "unknown"
+  private var usingLocalDebugServer = false
   private var attemptedDebugFallback = false
+  private var attemptedRemoteFallback = false
   private val pendingEvents = mutableListOf<String>()
   private val diagnostics = ArrayDeque<String>()
+  private val startupTimeoutRunnable = Runnable {
+    if (startupCompleted) {
+      return@Runnable
+    }
+    appendDiagnostic("Startup timeout while source=$shellSource.")
+    if (!attemptedRemoteFallback && BuildConfig.WEB_REMOTE_FALLBACK_URL.isNotBlank()) {
+      loadRemoteFallback("startup_timeout")
+    } else {
+      showStartupFailure(
+        getString(R.string.startup_timeout_title),
+        getString(R.string.startup_timeout_message)
+      )
+    }
+  }
 
   private val playbackEventReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -53,13 +88,24 @@ class MainActivity : AppCompatActivity() {
     setContentView(R.layout.activity_main)
 
     webView = findViewById(R.id.webView)
+    startupOverlay = findViewById(R.id.startupOverlay)
+    startupProgress = findViewById(R.id.startupProgress)
+    startupTitle = findViewById(R.id.startupTitle)
+    startupMessage = findViewById(R.id.startupMessage)
+    startupActions = findViewById(R.id.startupActions)
+    retryButton = findViewById(R.id.retryButton)
+    exportDiagnosticsButton = findViewById(R.id.exportDiagnosticsButton)
+
+    initializeStartupOverlay()
     configureWebView()
 
     networkMonitor = NetworkMonitor(this) { connected, transport ->
-      val payload = JSONObject()
-        .put("connected", connected)
-        .put("transport", transport)
-      emitHostEvent("network.changed", payload)
+      runOnUiThread {
+        val payload = JSONObject()
+          .put("connected", connected)
+          .put("transport", transport)
+        emitHostEvent("network.changed", payload)
+      }
     }
 
     registerPlaybackEvents()
@@ -100,6 +146,7 @@ class MainActivity : AppCompatActivity() {
   }
 
   override fun onDestroy() {
+    startupHandler.removeCallbacksAndMessages(null)
     emitLifecycle("destroyed")
     unregisterReceiver(playbackEventReceiver)
     webView.removeJavascriptInterface(bridgeName)
@@ -136,8 +183,10 @@ class MainActivity : AppCompatActivity() {
       }
 
       override fun onPageFinished(view: WebView?, url: String?) {
+        appendDiagnostic("onPageFinished source=$shellSource url=$url")
         webReady = true
         flushPendingEvents()
+        probeForRenderedContent()
       }
 
       override fun onReceivedError(
@@ -150,16 +199,30 @@ class MainActivity : AppCompatActivity() {
           TAG,
           "WebView load error mainFrame=$isMainFrame code=${error?.errorCode} description=${error?.description} url=${request?.url}"
         )
+        appendDiagnostic(
+          "WebView load error source=$shellSource code=${error?.errorCode} description=${error?.description} url=${request?.url}"
+        )
         if (!isMainFrame) {
           return
         }
 
-        if (BuildConfig.DEBUG && !attemptedDebugFallback) {
+        if (usingLocalDebugServer && !attemptedDebugFallback) {
           attemptedDebugFallback = true
           appendDiagnostic("Debug URL failed, falling back to bundled web assets.")
           Toast.makeText(this@MainActivity, "Dev server unavailable, using bundled shell.", Toast.LENGTH_SHORT).show()
           loadLocalShell()
+          return
         }
+
+        if (!attemptedRemoteFallback && BuildConfig.WEB_REMOTE_FALLBACK_URL.isNotBlank()) {
+          loadRemoteFallback("main_frame_error")
+          return
+        }
+
+        showStartupFailure(
+          getString(R.string.startup_error_title),
+          getString(R.string.startup_error_message)
+        )
       }
     }
   }
@@ -187,17 +250,49 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun loadShell() {
+    startupCompleted = false
+    webReady = false
+    showStartupLoading(
+      getString(R.string.startup_loading_title),
+      getString(R.string.startup_loading_message)
+    )
+    startStartupWatchdog()
+
     if (BuildConfig.DEBUG && BuildConfig.WEB_APP_URL.isNotBlank()) {
+      usingLocalDebugServer = isLocalDebugUrl(BuildConfig.WEB_APP_URL)
       appendDiagnostic("Loading debug web shell from ${BuildConfig.WEB_APP_URL}")
+      shellSource = if (usingLocalDebugServer) "debug" else "remote"
       webView.loadUrl(BuildConfig.WEB_APP_URL)
       return
     }
+
+    usingLocalDebugServer = false
     loadLocalShell()
   }
 
   private fun loadLocalShell() {
     appendDiagnostic("Loading bundled web shell from assets.")
+    shellSource = "bundled"
+    webReady = false
     webView.loadUrl(localShellUrl)
+  }
+
+  private fun loadRemoteFallback(reason: String) {
+    val fallbackUrl = BuildConfig.WEB_REMOTE_FALLBACK_URL
+    if (fallbackUrl.isBlank()) {
+      showStartupFailure(
+        getString(R.string.startup_error_title),
+        getString(R.string.startup_error_message)
+      )
+      return
+    }
+
+    attemptedRemoteFallback = true
+    shellSource = "remote"
+    webReady = false
+    appendDiagnostic("Loading remote fallback shell due to $reason -> $fallbackUrl")
+    Toast.makeText(this, "Local shell unavailable, loading fallback.", Toast.LENGTH_SHORT).show()
+    webView.loadUrl(fallbackUrl)
   }
 
   private fun handleDeepLink(intent: Intent?) {
@@ -296,6 +391,121 @@ class MainActivity : AppCompatActivity() {
     }
 
     startActivity(Intent.createChooser(shareIntent, getString(R.string.export_diagnostics_title)))
+  }
+
+  private fun initializeStartupOverlay() {
+    retryButton.setOnClickListener {
+      appendDiagnostic("Manual startup retry requested by user.")
+      attemptedDebugFallback = false
+      attemptedRemoteFallback = false
+      loadShell()
+    }
+    exportDiagnosticsButton.setOnClickListener { exportDiagnostics() }
+    startupOverlay.visibility = View.VISIBLE
+  }
+
+  private fun startStartupWatchdog() {
+    startupHandler.removeCallbacks(startupTimeoutRunnable)
+    startupHandler.postDelayed(startupTimeoutRunnable, STARTUP_TIMEOUT_MS)
+  }
+
+  private fun probeForRenderedContent() {
+    val probeScript = """
+      (() => {
+        try {
+          const root = document.getElementById('root');
+          const text = (root && root.innerText ? root.innerText : '').trim();
+          const result = {
+            rootExists: !!root,
+            childCount: root ? root.childElementCount : 0,
+            textLength: text.length
+          };
+          return JSON.stringify(result);
+        } catch (error) {
+          return JSON.stringify({ error: String(error) });
+        }
+      })();
+    """.trimIndent()
+
+    webView.evaluateJavascript(probeScript) { rawResult ->
+      if (startupCompleted) {
+        return@evaluateJavascript
+      }
+
+      val probe = parseProbeResult(rawResult)
+
+      if (probe == null) {
+        appendDiagnostic("Startup probe parse failed for source=$shellSource: $rawResult")
+        markStartupComplete()
+        return@evaluateJavascript
+      }
+
+      val childCount = probe.optInt("childCount", 0)
+      val textLength = probe.optInt("textLength", 0)
+      appendDiagnostic("Startup probe source=$shellSource childCount=$childCount textLength=$textLength")
+
+      if (childCount > 0 || textLength > 0 || shellSource == "remote") {
+        markStartupComplete()
+        return@evaluateJavascript
+      }
+
+      if (shellSource == "debug" && usingLocalDebugServer && !attemptedDebugFallback) {
+        attemptedDebugFallback = true
+        appendDiagnostic("Debug shell rendered blank, falling back to bundled shell.")
+        loadLocalShell()
+        return@evaluateJavascript
+      }
+
+      if (shellSource != "remote" && !attemptedRemoteFallback && BuildConfig.WEB_REMOTE_FALLBACK_URL.isNotBlank()) {
+        loadRemoteFallback("blank_render_probe")
+        return@evaluateJavascript
+      }
+
+      showStartupFailure(
+        getString(R.string.startup_error_title),
+        getString(R.string.startup_error_message)
+      )
+    }
+  }
+
+  private fun parseProbeResult(rawResult: String): JSONObject? {
+    val parsed = runCatching { JSONTokener(rawResult).nextValue() }.getOrNull() ?: return null
+    return when (parsed) {
+      is JSONObject -> parsed
+      is String -> runCatching { JSONObject(parsed) }.getOrNull()
+      else -> null
+    }
+  }
+
+  private fun markStartupComplete() {
+    startupCompleted = true
+    startupHandler.removeCallbacks(startupTimeoutRunnable)
+    startupOverlay.visibility = View.GONE
+    appendDiagnostic("Startup completed with source=$shellSource.")
+  }
+
+  private fun showStartupLoading(title: String, message: String) {
+    startupOverlay.visibility = View.VISIBLE
+    startupProgress.visibility = View.VISIBLE
+    startupActions.visibility = View.GONE
+    startupTitle.text = title
+    startupMessage.text = message
+  }
+
+  private fun showStartupFailure(title: String, message: String) {
+    startupCompleted = false
+    startupHandler.removeCallbacks(startupTimeoutRunnable)
+    startupOverlay.visibility = View.VISIBLE
+    startupProgress.visibility = View.GONE
+    startupActions.visibility = View.VISIBLE
+    startupTitle.text = title
+    startupMessage.text = message
+    appendDiagnostic("Startup failure shown: $title - $message")
+  }
+
+  private fun isLocalDebugUrl(url: String): Boolean {
+    val host = runCatching { Uri.parse(url).host.orEmpty() }.getOrDefault("")
+    return host == "10.0.2.2" || host == "127.0.0.1" || host == "localhost"
   }
 
   private fun appendDiagnostic(entry: String) {
