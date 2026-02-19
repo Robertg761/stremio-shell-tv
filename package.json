@@ -1,0 +1,19 @@
+{
+  "name": "stremio-shell",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Android/Google TV first shell for stremio-core with desktop hosts as secondary targets.",
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "core:use-npm": "pnpm --filter @stremio-shell/core-bridge add @stremio/stremio-core-web@latest",
+    "core:use-local": "powershell -ExecutionPolicy Bypass -File scripts/use-local-core.ps1"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.6",
+    "typescript": "^5.9.2"
+  }
+}

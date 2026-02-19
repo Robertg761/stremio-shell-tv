@@ -1,0 +1,26 @@
+{
+  "contractVersion": 1,
+  "envelope": {
+    "type": "string",
+    "version": 1,
+    "payload": "object",
+    "timestampMs": "number"
+  },
+  "hostEvents": [
+    "lifecycle.changed",
+    "network.changed",
+    "back.pressed",
+    "deepLink.received",
+    "playback.result"
+  ],
+  "hostCommands": [
+    "playback.open",
+    "playback.close",
+    "external.openUrl",
+    "diagnostics.export"
+  ],
+  "notes": [
+    "Android host should reject envelopes where version != 1.",
+    "Payloads must be JSON-serializable before sending to apps/web."
+  ]
+}
