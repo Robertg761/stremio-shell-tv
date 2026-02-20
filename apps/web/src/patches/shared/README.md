@@ -7,3 +7,4 @@ Examples:
 - bridge adapters
 - telemetry wrappers
 - diagnostics hooks
+- native playback handoff adapters

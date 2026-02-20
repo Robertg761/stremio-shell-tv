@@ -21,6 +21,8 @@
   ],
   "notes": [
     "Android host should reject envelopes where version != 1.",
-    "Payloads must be JSON-serializable before sending to apps/web."
+    "Payloads must be JSON-serializable before sending to apps/web.",
+    "playback.open may include optional fields: artworkUrl, logoUrl, resumePositionMs, fallbackWebUrl, settings, tracks.",
+    "playback.result may include optional fields: fallbackTriggered, failureDomain, failureDetail, settingsDiagnostics."
   ]
 }

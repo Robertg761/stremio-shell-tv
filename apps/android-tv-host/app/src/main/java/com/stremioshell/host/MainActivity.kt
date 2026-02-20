@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private const val TAG = "StremioHost"
     private const val STARTUP_TIMEOUT_MS = 12000L
     private const val LOCAL_STREAMING_PORT = 11470
+    private const val NATIVE_PLAYBACK_DEDUP_MS = 3000L
   }
 
   private lateinit var webView: WebView
@@ -79,6 +80,8 @@ class MainActivity : AppCompatActivity() {
   private var attemptedRemoteFallback = false
   private var lastNativePlaybackUrl: String? = null
   private var lastNativePlaybackAtMs: Long = 0L
+  private var lastStructuredPlaybackAtMs: Long = 0L
+  private val nativeFallbackLoopGuard = NativePlaybackLoopGuard()
   private val pendingEvents = mutableListOf<String>()
   private val diagnostics = ArrayDeque<String>()
   private val startupTimeoutRunnable = Runnable {
@@ -99,6 +102,9 @@ class MainActivity : AppCompatActivity() {
   private val playbackEventReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
       val eventJson = intent.getStringExtra(PlaybackBridge.EXTRA_EVENT_JSON) ?: return
+      parsePlaybackResultPayload(eventJson)?.let { payload ->
+        onPlaybackResult(payload)
+      }
       emitHostEventJson(eventJson)
     }
   }
@@ -208,8 +214,7 @@ class MainActivity : AppCompatActivity() {
     webView.webViewClient = object : WebViewClient() {
       override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val target = extractLocalStreamingTarget(request.url) ?: return false
-        maybeOpenNativePlaybackFromStreamingServer(target.streamId, target.mediaUrl, request.url.toString())
-        return true
+        return maybeOpenNativePlaybackFromStreamingServer(target.streamId, target.mediaUrl, request.url.toString())
       }
 
       override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -220,6 +225,7 @@ class MainActivity : AppCompatActivity() {
       override fun onPageFinished(view: WebView?, url: String?) {
         appendDiagnostic("onPageFinished source=$shellSource url=$url")
         webReady = true
+        installNativePlaybackCommandAdapter()
         installPlaybackHandoffShim()
         flushPendingEvents()
         applyWebMediaAudioGuard()
@@ -348,7 +354,12 @@ class MainActivity : AppCompatActivity() {
         onSuccess = { envelope ->
           appendDiagnostic("Received host command: ${envelope.type}")
           when (envelope.type) {
-            "playback.open" -> openPlayback(envelope.payload)
+            "playback.open" -> {
+              lastStructuredPlaybackAtMs = System.currentTimeMillis()
+              if (!openPlayback(envelope.payload)) {
+                appendDiagnostic("Native playback command skipped due to fallback guard.")
+              }
+            }
             "playback.close" -> PlaybackBridge.requestPlaybackClose(this)
             "external.openUrl" -> openExternalUrl(envelope.payload)
             "diagnostics.export" -> exportDiagnostics()
@@ -370,32 +381,57 @@ class MainActivity : AppCompatActivity() {
     }
   }
 
-  private fun openPlayback(payload: JSONObject) {
-    val url = payload.optString("url")
-    val streamId = payload.optString("streamId")
-    val title = payload.optString("title")
-    val subtitle = payload.optString("subtitle")
-    val positionMs = payload.optLong("positionMs", 0L)
-
-    if (url.isBlank()) {
+  private fun openPlayback(payload: JSONObject): Boolean {
+    val request = NativePlaybackContracts.fromPayload(payload)
+    if (request == null) {
+      val streamId = payload.optString("streamId").ifBlank { null }
       val errorPayload = HostBridgeContract.createPlaybackPayload(
         status = "failed",
-        streamId = streamId.ifBlank { null },
+        streamId = streamId,
         errorCode = "missing_url",
-        message = "playback.open command requires payload.url"
+        message = "playback.open command requires payload.url",
+        failureDomain = "host",
+        failureDetail = "invalid_open_payload"
       )
       emitHostEvent("playback.result", errorPayload)
-      return
+      return false
     }
 
-    val playerIntent = Intent(this, PlayerActivity::class.java).apply {
-      putExtra(PlaybackBridge.EXTRA_URL, url)
-      putExtra(PlaybackBridge.EXTRA_STREAM_ID, streamId)
-      putExtra(PlaybackBridge.EXTRA_TITLE, title)
-      putExtra(PlaybackBridge.EXTRA_SUBTITLE, subtitle)
-      putExtra(PlaybackBridge.EXTRA_POSITION_MS, positionMs)
+    if (nativeFallbackLoopGuard.shouldSkip(request.url, request.streamId)) {
+      appendDiagnostic(
+        "Skipping native playback due to loop guard streamId=${request.streamId} url=${request.url.take(120)}"
+      )
+      return false
     }
+
+    val settingsJson = payload.optJSONObject("settings")
+    val tracksJson = payload.optJSONObject("tracks")
+    val playbackPositionMs = request.resumePositionMs ?: request.positionMs
+
+    val playerIntent = Intent(this, PlayerActivity::class.java).apply {
+      putExtra(PlaybackBridge.EXTRA_URL, request.url)
+      putExtra(PlaybackBridge.EXTRA_STREAM_ID, request.streamId)
+      putExtra(PlaybackBridge.EXTRA_TITLE, request.title)
+      putExtra(PlaybackBridge.EXTRA_SUBTITLE, request.subtitle)
+      putExtra(PlaybackBridge.EXTRA_POSITION_MS, playbackPositionMs)
+      putExtra(PlaybackBridge.EXTRA_ARTWORK_URL, request.artworkUrl)
+      putExtra(PlaybackBridge.EXTRA_LOGO_URL, request.logoUrl)
+      putExtra(PlaybackBridge.EXTRA_RESUME_POSITION_MS, request.resumePositionMs ?: -1L)
+      putExtra(PlaybackBridge.EXTRA_FALLBACK_WEB_URL, request.fallbackWebUrl)
+      putExtra(PlaybackBridge.EXTRA_SOURCE_URL, request.sourceUrl)
+      if (settingsJson != null) {
+        putExtra(PlaybackBridge.EXTRA_SETTINGS_JSON, settingsJson.toString())
+      }
+      if (tracksJson != null) {
+        putExtra(PlaybackBridge.EXTRA_TRACKS_JSON, tracksJson.toString())
+      }
+    }
+
+    appendDiagnostic(
+      "Opening native playback streamId=${request.streamId} url=${request.url.take(120)} fallback=${request.fallbackWebUrl}"
+    )
     startActivity(playerIntent)
+    return true
   }
 
   private fun openExternalUrl(payload: JSONObject) {
@@ -589,6 +625,81 @@ class MainActivity : AppCompatActivity() {
     webView.evaluateJavascript(script, null)
   }
 
+  private fun parsePlaybackResultPayload(eventJson: String): JSONObject? {
+    val event = runCatching { JSONObject(eventJson) }.getOrNull() ?: return null
+    if (event.optString("type") != "playback.result") {
+      return null
+    }
+    return event.optJSONObject("payload")
+  }
+
+  private fun onPlaybackResult(payload: JSONObject) {
+    val status = payload.optString("status")
+    if (status != "failed" || !payload.optBoolean("fallbackTriggered", false)) {
+      return
+    }
+
+    val streamId = payload.optString("streamId").ifBlank { null }
+    val mediaUrl = payload.optString("url").ifBlank { null }
+    val fallbackWebUrl = payload.optString("fallbackWebUrl").ifBlank { null }
+    val failureDomain = payload.optString("failureDomain").ifBlank { "unknown" }
+    val failureDetail = payload.optString("failureDetail").ifBlank { "unspecified" }
+
+    nativeFallbackLoopGuard.mark(mediaUrl, streamId)
+    registerLegacyShimSkip(mediaUrl)
+    appendDiagnostic(
+      "Native fallback triggered streamId=$streamId domain=$failureDomain detail=$failureDetail mediaUrl=${mediaUrl?.take(120)}"
+    )
+
+    if (!fallbackWebUrl.isNullOrBlank()) {
+      val resolvedFallbackUrl = resolveFallbackWebUrl(fallbackWebUrl)
+      runOnUiThread {
+        appendDiagnostic("Loading fallback web route: $resolvedFallbackUrl")
+        webView.loadUrl(resolvedFallbackUrl)
+      }
+      return
+    }
+
+    dispatchNativeFallbackEvent(payload)
+  }
+
+  private fun dispatchNativeFallbackEvent(payload: JSONObject) {
+    val escaped = JSONObject.quote(payload.toString())
+    val script = """
+      (() => {
+        try {
+          const detail = JSON.parse($escaped);
+          window.dispatchEvent(new CustomEvent('stremio:native-playback-fallback', { detail }));
+        } catch (_) {}
+      })();
+    """.trimIndent()
+    webView.evaluateJavascript(script, null)
+  }
+
+  private fun registerLegacyShimSkip(mediaUrl: String?) {
+    if (mediaUrl.isNullOrBlank()) {
+      return
+    }
+    val escapedUrl = JSONObject.quote(mediaUrl)
+    val skipUntil = System.currentTimeMillis() + 15_000L
+    val script = """
+      (() => {
+        window.__stremioNativeSkipUrls = window.__stremioNativeSkipUrls || {};
+        window.__stremioNativeSkipUrls[$escapedUrl] = $skipUntil;
+      })();
+    """.trimIndent()
+    webView.evaluateJavascript(script, null)
+  }
+
+  private fun resolveFallbackWebUrl(rawUrl: String): String {
+    if (!rawUrl.startsWith("#")) {
+      return rawUrl
+    }
+
+    val base = webView.url?.substringBefore('#') ?: localShellUrl
+    return "$base$rawUrl"
+  }
+
   private fun interceptStreamingServerRequest(uri: Uri): WebResourceResponse? {
     if (!isLocalStreamingServerRequest(uri)) {
       return null
@@ -596,9 +707,11 @@ class MainActivity : AppCompatActivity() {
 
     val target = extractLocalStreamingTarget(uri)
     if (target != null) {
-      maybeOpenNativePlaybackFromStreamingServer(target.streamId, target.mediaUrl, uri.toString())
-      // Return a tiny valid manifest response so WebView does not hard-fail while native playback opens.
-      return createTextResponse("application/vnd.apple.mpegurl", "#EXTM3U\n")
+      if (maybeOpenNativePlaybackFromStreamingServer(target.streamId, target.mediaUrl, uri.toString())) {
+        // Return a tiny valid manifest response so WebView does not hard-fail while native playback opens.
+        return createTextResponse("application/vnd.apple.mpegurl", "#EXTM3U\n")
+      }
+      return null
     }
 
     val path = uri.path.orEmpty()
@@ -671,22 +784,43 @@ class MainActivity : AppCompatActivity() {
     )
   }
 
-  private fun maybeOpenNativePlaybackFromStreamingServer(streamId: String?, mediaUrl: String, sourceUrl: String) {
+  private fun maybeOpenNativePlaybackFromStreamingServer(streamId: String?, mediaUrl: String, sourceUrl: String): Boolean {
+    if (nativeFallbackLoopGuard.shouldSkip(mediaUrl, streamId)) {
+      appendDiagnostic(
+        "Skipping native intercept due to fallback guard streamId=$streamId mediaUrl=${mediaUrl.take(120)}"
+      )
+      return false
+    }
+
     val now = System.currentTimeMillis()
-    if (lastNativePlaybackUrl == mediaUrl && now - lastNativePlaybackAtMs < 3000L) {
-      return
+    if (now - lastStructuredPlaybackAtMs < 1500L) {
+      appendDiagnostic("Skipping legacy intercept because structured playback command was just received.")
+      return false
+    }
+
+    if (lastNativePlaybackUrl == mediaUrl && now - lastNativePlaybackAtMs < NATIVE_PLAYBACK_DEDUP_MS) {
+      return true
     }
 
     lastNativePlaybackUrl = mediaUrl
     lastNativePlaybackAtMs = now
 
+    val payload = JSONObject()
+      .put("url", mediaUrl)
+      .put("sourceUrl", sourceUrl)
+      .put("streamId", streamId ?: mediaUrl.hashCode().toString())
+    webView.url?.takeIf { it.isNotBlank() }?.let { payload.put("fallbackWebUrl", it) }
+
+    appendDiagnostic("Intercepted streaming request and opened native playback. source=$sourceUrl")
+
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      return openPlayback(payload)
+    }
+
     runOnUiThread {
-      val payload = JSONObject()
-        .put("url", mediaUrl)
-        .put("streamId", streamId ?: mediaUrl.hashCode().toString())
-      appendDiagnostic("Intercepted streaming request and opened native playback. source=$sourceUrl")
       openPlayback(payload)
     }
+    return true
   }
 
   private fun extractStreamIdFromHlsPath(path: String): String? {
@@ -717,6 +851,57 @@ class MainActivity : AppCompatActivity() {
     )
   }
 
+  private fun installNativePlaybackCommandAdapter() {
+    val script = """
+      (() => {
+        if (window.__stremioNativePlaybackCommandAdapterInstalled) {
+          return;
+        }
+        window.__stremioNativePlaybackCommandAdapterInstalled = true;
+
+        const sendPlaybackOpen = (payload) => {
+          if (!payload || typeof payload.url !== 'string' || !payload.url.trim()) {
+            return;
+          }
+          if (!window.stremioHost || typeof window.stremioHost.sendCommand !== 'function') {
+            return;
+          }
+
+          const streamId = typeof payload.streamId === 'string' && payload.streamId.trim().length > 0
+            ? payload.streamId
+            : (payload.url + ':' + Date.now());
+
+          const envelope = {
+            type: 'playback.open',
+            version: 1,
+            payload: {
+              ...payload,
+              streamId,
+              fallbackWebUrl: payload.fallbackWebUrl || window.location.href
+            },
+            timestampMs: Date.now()
+          };
+          window.stremioHost.sendCommand(JSON.stringify(envelope));
+        };
+
+        window.stremioShellNativePlayback = window.stremioShellNativePlayback || {};
+        if (typeof window.stremioShellNativePlayback.open !== 'function') {
+          window.stremioShellNativePlayback.open = sendPlaybackOpen;
+        }
+
+        window.addEventListener('stremio:native-playback-open', (event) => {
+          const detail = event && event.detail ? event.detail : null;
+          if (!detail) {
+            return;
+          }
+          sendPlaybackOpen(detail);
+        });
+      })();
+    """.trimIndent()
+
+    webView.evaluateJavascript(script, null)
+  }
+
   private fun installPlaybackHandoffShim() {
     val script = """
       (() => {
@@ -737,7 +922,11 @@ class MainActivity : AppCompatActivity() {
             const mediaUrl = parsed.searchParams.get('mediaURL') || parsed.searchParams.get('mediaUrl') || parsed.searchParams.get('url');
             if (!mediaUrl) return null;
             const segments = parsed.pathname.split('/').filter(Boolean);
-            return { mediaUrl, streamId: segments.length > 1 ? segments[1] : null };
+            return {
+              mediaUrl,
+              streamId: segments.length > 1 ? segments[1] : null,
+              sourceUrl: parsed.toString()
+            };
           } catch (_) {
             return null;
           }
@@ -752,7 +941,9 @@ class MainActivity : AppCompatActivity() {
             version: 1,
             payload: {
               url: target.mediaUrl,
-              streamId: target.streamId || undefined
+              streamId: target.streamId || undefined,
+              sourceUrl: target.sourceUrl || undefined,
+              fallbackWebUrl: window.location.href
             },
             timestampMs: Date.now()
           };
@@ -762,6 +953,11 @@ class MainActivity : AppCompatActivity() {
         const maybeOpenNative = (value) => {
           const target = extractTarget(value);
           if (!target) return false;
+          const skips = window.__stremioNativeSkipUrls || {};
+          const skipUntil = skips[target.mediaUrl];
+          if (typeof skipUntil === 'number' && Date.now() < skipUntil) {
+            return false;
+          }
           sendPlaybackOpen(target);
           return true;
         };

@@ -25,10 +25,25 @@ Defines web-to-host commands and host-to-web events for native wrappers.
 - `back.pressed`
 - `deepLink.received`
 - `playback.result`
+  - Optional additive fields for diagnostics/fallback:
+    - `fallbackTriggered: boolean`
+    - `failureDomain: "native_audio" | "network" | "decode" | "unsupported" | "host" | "unknown"`
+    - `failureDetail: string`
+    - `settingsDiagnostics: Array<object>`
 
 ## Host commands
 
 - `playback.open`
+  - Required:
+    - `streamId: string`
+    - `url: string`
+  - Optional additive fields:
+    - `artworkUrl: string`
+    - `logoUrl: string`
+    - `resumePositionMs: number`
+    - `fallbackWebUrl: string`
+    - `settings: object`
+    - `tracks: object`
 - `playback.close`
 - `external.openUrl`
 - `diagnostics.export`

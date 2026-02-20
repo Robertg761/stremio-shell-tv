@@ -1,4 +1,12 @@
-import { createHostEnvelope, isHostEnvelope, type HostCommand, type HostEvent } from "./types/host-bridge";
+import {
+  createHostEnvelope,
+  isHostEnvelope,
+  type HostCommand,
+  type HostEvent,
+  type JsonObject,
+  type NativePlaybackSettings,
+  type NativePlaybackTracks
+} from "./types/host-bridge";
 
 type HostEventListener = (event: HostEvent) => void;
 
@@ -40,4 +48,54 @@ export function sendHostCommand(command: HostCommand): void {
 
 export function createDiagnosticsExportCommand(reason: "manual" | "error" | "support" = "manual"): HostCommand {
   return createHostEnvelope("diagnostics.export", { reason });
+}
+
+type PlaybackOpenPayload = {
+  streamId: string;
+  url: string;
+  title?: string;
+  subtitle?: string;
+  positionMs?: number;
+  artworkUrl?: string;
+  logoUrl?: string;
+  resumePositionMs?: number;
+  fallbackWebUrl?: string;
+  settings?: NativePlaybackSettings;
+  tracks?: NativePlaybackTracks;
+};
+
+export function createPlaybackOpenCommand(payload: PlaybackOpenPayload): HostCommand {
+  const normalizedPayload: {
+    streamId: string;
+    url: string;
+    title?: string;
+    subtitle?: string;
+    positionMs?: number;
+    artworkUrl?: string;
+    logoUrl?: string;
+    resumePositionMs?: number;
+    fallbackWebUrl?: string;
+    settings?: JsonObject;
+    tracks?: JsonObject;
+  } = {
+    streamId: payload.streamId,
+    url: payload.url,
+    title: payload.title,
+    subtitle: payload.subtitle,
+    positionMs: payload.positionMs,
+    artworkUrl: payload.artworkUrl,
+    logoUrl: payload.logoUrl,
+    resumePositionMs: payload.resumePositionMs,
+    fallbackWebUrl: payload.fallbackWebUrl
+  };
+
+  if (payload.settings) {
+    normalizedPayload.settings = payload.settings as unknown as JsonObject;
+  }
+
+  if (payload.tracks) {
+    normalizedPayload.tracks = payload.tracks as unknown as JsonObject;
+  }
+
+  return createHostEnvelope("playback.open", normalizedPayload);
 }

@@ -24,13 +24,14 @@ Use `apps/android-tv-host/host-bridge-contract.json` as the source of truth for 
   - `com.stremioshell.host.mobile`
   - `com.stremioshell.host.tv`
 - Full-screen WebView host loading:
-  - Debug default: `https://web.stremio.com/` for immediate parity testing.
+  - Debug default: bundled `apps/web/dist` shell (override with `-PwebAppUrl=...` when needed).
   - Debug override: pass `-PwebAppUrl=http://10.0.2.2:5173` to target local Vite dev shell.
   - Release: bundled `apps/web/dist` assets.
   - Startup watchdog + diagnostics overlay prevents silent black screens and offers retry/export actions.
   - Remote fallback URL (`https://web.stremio.com/`) is used only when local shell startup fails.
 - JS bridge command support:
   - `playback.open`
+    - Optional metadata/settings payloads: artwork/logo/resume/fallback URL/settings/tracks.
   - `playback.close`
   - `external.openUrl`
   - `diagnostics.export`
@@ -40,6 +41,7 @@ Use `apps/android-tv-host/host-bridge-contract.json` as the source of truth for 
   - `back.pressed`
   - `deepLink.received`
   - `playback.result`
+    - Optional fallback diagnostics fields: `fallbackTriggered`, `failureDomain`, `failureDetail`, `settingsDiagnostics`.
 - Native playback path via Media3 ExoPlayer.
 
 ## Build and run

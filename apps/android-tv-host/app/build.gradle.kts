@@ -9,7 +9,7 @@ plugins {
 val debugWebAppUrl = (project.findProperty("webAppUrl") as String?)
   ?.trim()
   .orEmpty()
-  .ifBlank { "https://web.stremio.com/" }
+  .ifBlank { "" }
 
 android {
   namespace = "com.stremioshell.host"
@@ -107,4 +107,7 @@ dependencies {
 
   implementation("androidx.media3:media3-exoplayer:1.4.1")
   implementation("androidx.media3:media3-ui:1.4.1")
+
+  testImplementation("junit:junit:4.13.2")
+  testImplementation("org.json:json:20240303")
 }

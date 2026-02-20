@@ -13,6 +13,13 @@ object PlaybackBridge {
   const val EXTRA_TITLE = "title"
   const val EXTRA_SUBTITLE = "subtitle"
   const val EXTRA_POSITION_MS = "position_ms"
+  const val EXTRA_ARTWORK_URL = "artwork_url"
+  const val EXTRA_LOGO_URL = "logo_url"
+  const val EXTRA_RESUME_POSITION_MS = "resume_position_ms"
+  const val EXTRA_FALLBACK_WEB_URL = "fallback_web_url"
+  const val EXTRA_SETTINGS_JSON = "settings_json"
+  const val EXTRA_TRACKS_JSON = "tracks_json"
+  const val EXTRA_SOURCE_URL = "source_url"
 
   fun sendPlaybackEvent(context: Context, payload: JSONObject) {
     val event = HostBridgeContract.createEventEnvelope("playback.result", payload)

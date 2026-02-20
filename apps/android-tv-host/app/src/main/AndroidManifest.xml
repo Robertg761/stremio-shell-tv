@@ -15,7 +15,6 @@
     <activity
       android:name=".PlayerActivity"
       android:exported="false"
-      android:screenOrientation="sensorLandscape"
       android:theme="@style/Theme.StremioShell.NoActionBar" />
 
     <activity

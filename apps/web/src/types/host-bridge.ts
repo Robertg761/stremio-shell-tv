@@ -11,6 +11,42 @@ export interface HostEnvelope<TType extends string, TPayload extends JsonObject>
   timestampMs: number;
 }
 
+export interface PlaybackTrack {
+  id?: string;
+  lang?: string;
+  label?: string;
+  origin?: string;
+  embedded?: boolean;
+  mode?: string;
+  url?: string;
+}
+
+export interface NativePlaybackSettings {
+  audioLanguage?: string | null;
+  surroundSound?: boolean;
+  subtitlesLanguage?: string | null;
+  subtitlesSize?: number;
+  subtitlesOffset?: number;
+  subtitlesDelay?: number;
+  subtitlesTextColor?: string | null;
+  subtitlesBackgroundColor?: string | null;
+  subtitlesOutlineColor?: string | null;
+  playbackSpeed?: number;
+  hardwareDecoding?: boolean;
+  assSubtitlesStyling?: boolean;
+  videoMode?: string | null;
+  pauseOnMinimize?: boolean;
+  nextVideoNotificationDuration?: number;
+  bingeWatching?: boolean;
+}
+
+export interface NativePlaybackTracks {
+  audioTracks?: PlaybackTrack[];
+  subtitlesTracks?: PlaybackTrack[];
+  selectedAudioTrackId?: string | null;
+  selectedSubtitlesTrackId?: string | null;
+}
+
 export type HostEvent =
   | HostEnvelope<"lifecycle.changed", { state: "created" | "started" | "resumed" | "paused" | "stopped" | "destroyed" }>
   | HostEnvelope<"network.changed", { connected: boolean; transport?: "wifi" | "ethernet" | "cellular" | "unknown" }>
@@ -23,6 +59,13 @@ export type HostEvent =
         streamId?: string;
         errorCode?: string;
         message?: string;
+        url?: string;
+        fallbackWebUrl?: string;
+        resumePositionMs?: number;
+        fallbackTriggered?: boolean;
+        failureDomain?: "native_audio" | "network" | "decode" | "unsupported" | "host" | "unknown";
+        failureDetail?: string;
+        settingsDiagnostics?: JsonValue[];
       }
     >;
 
@@ -35,6 +78,12 @@ export type HostCommand =
         title?: string;
         subtitle?: string;
         positionMs?: number;
+        artworkUrl?: string;
+        logoUrl?: string;
+        resumePositionMs?: number;
+        fallbackWebUrl?: string;
+        settings?: JsonObject;
+        tracks?: JsonObject;
       }
     >
   | HostEnvelope<"playback.close", { reason?: "user" | "end" | "error" }>

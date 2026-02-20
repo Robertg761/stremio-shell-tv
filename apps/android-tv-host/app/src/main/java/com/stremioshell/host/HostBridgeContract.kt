@@ -1,5 +1,6 @@
 package com.stremioshell.host
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 data class HostEnvelope(
@@ -51,7 +52,14 @@ object HostBridgeContract {
     status: String,
     streamId: String? = null,
     errorCode: String? = null,
-    message: String? = null
+    message: String? = null,
+    url: String? = null,
+    fallbackWebUrl: String? = null,
+    resumePositionMs: Long? = null,
+    fallbackTriggered: Boolean? = null,
+    failureDomain: String? = null,
+    failureDetail: String? = null,
+    settingsDiagnostics: JSONArray? = null
   ): JSONObject {
     return JSONObject().apply {
       put("status", status)
@@ -63,6 +71,27 @@ object HostBridgeContract {
       }
       if (!message.isNullOrBlank()) {
         put("message", message)
+      }
+      if (!url.isNullOrBlank()) {
+        put("url", url)
+      }
+      if (!fallbackWebUrl.isNullOrBlank()) {
+        put("fallbackWebUrl", fallbackWebUrl)
+      }
+      if (resumePositionMs != null && resumePositionMs >= 0L) {
+        put("resumePositionMs", resumePositionMs)
+      }
+      if (fallbackTriggered != null) {
+        put("fallbackTriggered", fallbackTriggered)
+      }
+      if (!failureDomain.isNullOrBlank()) {
+        put("failureDomain", failureDomain)
+      }
+      if (!failureDetail.isNullOrBlank()) {
+        put("failureDetail", failureDetail)
+      }
+      if (settingsDiagnostics != null) {
+        put("settingsDiagnostics", settingsDiagnostics)
       }
     }
   }
