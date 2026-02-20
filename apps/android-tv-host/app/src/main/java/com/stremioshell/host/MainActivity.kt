@@ -486,7 +486,7 @@ class MainActivity : AppCompatActivity() {
     val probeScript = """
       (() => {
         try {
-          const root = document.getElementById('root');
+          const root = document.getElementById('root') || document.getElementById('app') || document.body;
           const text = (root && root.innerText ? root.innerText : '').trim();
           const result = {
             rootExists: !!root,
