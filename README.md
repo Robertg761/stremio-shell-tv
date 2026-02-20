@@ -4,7 +4,7 @@ Monorepo shell project for building a custom Stremio client with an Android/Goog
 
 ## Repo layout
 
-- `apps/web`: Shared shell UI (React + Vite) that talks to `stremio-core` through `core-bridge`.
+- `apps/web`: Staged upstream `stremio-web` bootstrap with shell patch overlays under `apps/web/src/patches/*`.
 - `packages/core-bridge`: Typed wrapper around `@stremio/stremio-core-web` runtime APIs.
 - `apps/android-tv-host`: Android/Google TV host integration notes and scripts.
 - `apps/desktop-host`: Desktop host strategy (Tauri/Electron) notes and scripts.
@@ -17,7 +17,7 @@ pnpm install
 pnpm dev
 ```
 
-Open the web shell at `http://localhost:5173`.
+Open the web shell at `https://localhost:5173`.
 
 ## Android builds (mobile + TV)
 

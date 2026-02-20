@@ -37,3 +37,12 @@ powershell -ExecutionPolicy Bypass -File scripts/sync-upstream-stremio-web.ps1 `
    - contract version bump,
    - contract doc update,
    - ADR update with migration notes.
+
+## Web bootstrap build flow
+
+- `apps/web` build/dev now stages `vendor/stremio-web/source` into `apps/web/.upstream-build/source`.
+- Overlay patches from:
+  - `apps/web/src/patches/shared/upstream-overrides`
+  - `apps/web/src/patches/phone/upstream-overrides`
+  - `apps/web/src/patches/tv/upstream-overrides`
+- Staged output is built with upstream webpack, then copied to `apps/web/dist`.

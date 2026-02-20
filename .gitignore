@@ -5,6 +5,7 @@ node_modules
 local.properties
 dist
 build
+apps/web/.upstream-build
 coverage
 *.log
 .DS_Store
