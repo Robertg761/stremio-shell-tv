@@ -10,6 +10,17 @@ on:
       - "scripts/extract_changelog_section.js"
       - ".github/workflows/release.yml"
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Publish as GitHub prerelease"
+        required: true
+        type: boolean
+        default: true
+      tag_suffix:
+        description: "Optional tag suffix (example: beta.1)"
+        required: false
+        type: string
+        default: "beta.1"
 
 permissions:
   contents: write
@@ -52,6 +63,33 @@ jobs:
         id: ver
         run: node scripts/get_version.js
 
+      - name: Compute Release Metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version_name }}"
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            SUFFIX="${{ inputs.tag_suffix }}"
+            PRERELEASE="${{ inputs.prerelease }}"
+          else
+            SUFFIX=""
+            PRERELEASE="false"
+          fi
+
+          if [ -n "$SUFFIX" ]; then
+            TAG_NAME="v${VERSION}-${SUFFIX}"
+            RELEASE_NAME="$TAG_NAME"
+          else
+            TAG_NAME="v${VERSION}"
+            RELEASE_NAME="$TAG_NAME"
+          fi
+
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
       - name: Skip If Release Already Exists
         id: exists
         env:
@@ -59,7 +97,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="v${{ steps.ver.outputs.version_name }}"
+          TAG="${{ steps.meta.outputs.tag_name }}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release already exists for $TAG; skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -161,9 +199,9 @@ jobs:
         if: steps.exists.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.ver.outputs.version_name }}
-          name: v${{ steps.ver.outputs.version_name }}
+          tag_name: ${{ steps.meta.outputs.tag_name }}
+          name: ${{ steps.meta.outputs.release_name }}
           body_path: dist/release-notes.md
           files: ${{ steps.dist.outputs.apk_files }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.meta.outputs.prerelease }}

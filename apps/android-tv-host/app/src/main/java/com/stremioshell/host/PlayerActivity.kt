@@ -21,6 +21,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -92,6 +95,7 @@ class PlayerActivity : AppCompatActivity() {
       ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
     }
     setContentView(R.layout.activity_player)
+    applyImmersiveMode()
     volumeControlStream = AudioManager.STREAM_MUSIC
 
     playerView = findViewById(R.id.playerView)
@@ -132,6 +136,13 @@ class PlayerActivity : AppCompatActivity() {
     initializePlayer(parsedRequest)
   }
 
+  override fun onWindowFocusChanged(hasFocus: Boolean) {
+    super.onWindowFocusChanged(hasFocus)
+    if (hasFocus) {
+      applyImmersiveMode()
+    }
+  }
+
   override fun onPause() {
     request?.settings?.pauseOnMinimize?.takeIf { it }?.let {
       player?.playWhenReady = false
@@ -150,6 +161,11 @@ class PlayerActivity : AppCompatActivity() {
         resumePositionMs = player?.currentPosition ?: request?.positionMs
       ))
     }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    applyImmersiveMode()
   }
 
   override fun onDestroy() {
@@ -602,6 +618,8 @@ class PlayerActivity : AppCompatActivity() {
       if (visibility == View.VISIBLE) {
         bindControllerButtons()
       }
+      // Media3 controller visibility transitions can bring system bars back on some devices.
+      uiHandler.post { applyImmersiveMode() }
     })
     bindControllerButtons()
   }
@@ -818,5 +836,12 @@ class PlayerActivity : AppCompatActivity() {
       normalizedPath.endsWith(".srt") -> MimeTypes.APPLICATION_SUBRIP
       else -> null
     }
+  }
+
+  private fun applyImmersiveMode() {
+    WindowCompat.setDecorFitsSystemWindows(window, false)
+    val controller = WindowInsetsControllerCompat(window, window.decorView)
+    controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    controller.hide(WindowInsetsCompat.Type.systemBars())
   }
 }
