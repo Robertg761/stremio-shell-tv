@@ -24,8 +24,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:keepScreenOn="true"
+    app:auto_show="true"
+    app:show_timeout="4000"
     app:show_buffering="never"
-    app:use_controller="false" />
+    app:use_controller="true" />
 
   <View
     android:id="@+id/titleFlashView"

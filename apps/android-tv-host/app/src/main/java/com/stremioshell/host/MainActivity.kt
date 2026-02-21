@@ -583,6 +583,7 @@ class MainActivity : AppCompatActivity() {
 
   private fun appendDiagnostic(entry: String) {
     val formatted = "${timestamp()} $entry"
+    Log.d(TAG, formatted)
     diagnostics.addLast(formatted)
     while (diagnostics.size > 200) {
       diagnostics.removeFirst()

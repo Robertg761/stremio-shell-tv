@@ -1,4 +1,6 @@
 const NATIVE_HANDOFF_DEDUP_MS = 1200;
+const LOCAL_STREAMING_HOSTS = new Set(["127.0.0.1", "localhost"]);
+const LOCAL_STREAMING_PORT = "11470";
 
 let lastHandoffKey = null;
 let lastHandoffAtMs = 0;
@@ -20,11 +22,11 @@ function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function toMilliseconds(seconds) {
-  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) {
+function normalizePositionMs(value) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     return undefined;
   }
-  return Math.round(seconds * 1000);
+  return Math.round(value);
 }
 
 function formatSeasonEpisode(seriesInfo) {
@@ -39,12 +41,86 @@ function formatSeasonEpisode(seriesInfo) {
   return `S${season}E${episode}`;
 }
 
-function resolvePlaybackUrl(player) {
+function parseHttpUrl(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = typeof window !== "undefined"
+      ? new URL(trimmed, window.location.href)
+      : new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed;
+  } catch (_) {
+    return null;
+  }
+}
+
+function resolveLocalStreamingMediaUrl(parsedUrl) {
+  if (!LOCAL_STREAMING_HOSTS.has(parsedUrl.hostname)) {
+    return null;
+  }
+
+  if (parsedUrl.port && parsedUrl.port !== LOCAL_STREAMING_PORT) {
+    return null;
+  }
+
+  const mediaUrl = firstString([
+    parsedUrl.searchParams.get("mediaURL"),
+    parsedUrl.searchParams.get("mediaUrl"),
+    parsedUrl.searchParams.get("url")
+  ]);
+
+  if (!mediaUrl) {
+    return null;
+  }
+
+  const parsedMediaUrl = parseHttpUrl(mediaUrl);
+  if (!parsedMediaUrl) {
+    return null;
+  }
+
+  if (LOCAL_STREAMING_HOSTS.has(parsedMediaUrl.hostname) && (!parsedMediaUrl.port || parsedMediaUrl.port === LOCAL_STREAMING_PORT)) {
+    return null;
+  }
+
+  return parsedMediaUrl.toString();
+}
+
+function normalizePlaybackTarget(candidate) {
+  const parsed = parseHttpUrl(candidate);
+  if (!parsed) {
+    return null;
+  }
+
+  const streamingMediaUrl = resolveLocalStreamingMediaUrl(parsed);
+  if (streamingMediaUrl) {
+    return {
+      mediaUrl: streamingMediaUrl,
+      sourceUrl: parsed.toString()
+    };
+  }
+
+  return {
+    mediaUrl: parsed.toString(),
+    sourceUrl: null
+  };
+}
+
+function resolvePlaybackTarget(player) {
   const externalPlayer = player?.selected?.stream?.deepLinks?.externalPlayer;
   const openPlayer = externalPlayer?.openPlayer;
   const readyStream = player?.stream?.type === "Ready" ? player.stream.content : null;
 
-  const candidate = firstString([
+  const candidates = [
     externalPlayer?.streaming,
     openPlayer?.android,
     openPlayer?.androidtv,
@@ -53,13 +129,16 @@ function resolvePlaybackUrl(player) {
     readyStream?.url,
     player?.selected?.stream?.externalUrl,
     player?.selected?.stream?.url
-  ]);
+  ];
 
-  if (!candidate) {
-    return null;
+  for (const candidate of candidates) {
+    const normalized = normalizePlaybackTarget(candidate);
+    if (normalized) {
+      return normalized;
+    }
   }
 
-  return /^https?:\/\//i.test(candidate) ? candidate : null;
+  return null;
 }
 
 function resolveStreamId(player, url) {
@@ -68,6 +147,15 @@ function resolveStreamId(player, url) {
   const type = firstString([path?.type, "video"]);
   const id = firstString([path?.id, player?.selected?.stream?.name, url]);
   return `${resource}:${type}:${id}`;
+}
+
+function resolveResumePositionMs(player) {
+  const selectedVideoId = player?.selected?.streamRequest?.path?.id;
+  const savedVideoId = player?.libraryItem?.state?.video_id;
+  if (!selectedVideoId || !savedVideoId || selectedVideoId !== savedVideoId) {
+    return 0;
+  }
+  return normalizePositionMs(player?.libraryItem?.state?.timeOffset) ?? 0;
 }
 
 function resolveTitle(player, metaItem) {
@@ -198,8 +286,9 @@ function openNativePlaybackForStream({ player, settings, forceTranscoding, strea
     return false;
   }
 
-  const mediaUrl = resolvePlaybackUrl(player);
-  if (!mediaUrl) {
+  const playbackTarget = resolvePlaybackTarget(player);
+  const mediaUrl = playbackTarget?.mediaUrl;
+  if (!mediaUrl || !/^https?:\/\//i.test(mediaUrl)) {
     return false;
   }
 
@@ -214,9 +303,12 @@ function openNativePlaybackForStream({ player, settings, forceTranscoding, strea
   }
 
   const metaItem = player?.metaItem?.type === "Ready" ? player.metaItem.content : null;
-  const resumePositionMs = toMilliseconds(player?.libraryItem?.state?.timeOffset);
+  const resumePositionMs = resolveResumePositionMs(player);
   const fallbackWebUrl = typeof window !== "undefined" ? window.location.href : undefined;
-  const sourceUrl = firstString([player?.selected?.stream?.deepLinks?.player]);
+  const sourceUrl = firstString([
+    playbackTarget?.sourceUrl,
+    player?.selected?.stream?.deepLinks?.player
+  ]);
 
   const payload = {
     streamId,
