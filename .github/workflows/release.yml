@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "apps/android-tv-host/app/build.gradle.kts"
+      - "CHANGELOG.md"
+      - "scripts/get_version.js"
+      - "scripts/extract_changelog_section.js"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Read Version
+        id: ver
+        run: node scripts/get_version.js
+
+      - name: Skip If Release Already Exists
+        id: exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v${{ steps.ver.outputs.version_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release already exists for $TAG; skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify Signing Secrets
+        if: steps.exists.outputs.skip != 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.SS_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.SS_SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SS_SIGNING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SS_SIGNING_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${KEYSTORE_B64:-}" ]; then echo "Missing secret: SS_KEYSTORE_B64"; missing=1; fi
+          if [ -z "${STORE_PASSWORD:-}" ]; then echo "Missing secret: SS_SIGNING_STORE_PASSWORD"; missing=1; fi
+          if [ -z "${KEY_ALIAS:-}" ]; then echo "Missing secret: SS_SIGNING_KEY_ALIAS"; missing=1; fi
+          if [ -z "${KEY_PASSWORD:-}" ]; then echo "Missing secret: SS_SIGNING_KEY_PASSWORD"; missing=1; fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Decode Keystore
+        if: steps.exists.outputs.skip != 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.SS_KEYSTORE_B64 }}
+          STORE_TYPE: ${{ secrets.SS_SIGNING_STORE_TYPE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/stremio-shell-keystore.jks"
+          echo "SS_SIGNING_STORE_FILE=$RUNNER_TEMP/stremio-shell-keystore.jks" >> "$GITHUB_ENV"
+          # Default to PKCS12 if a custom store type is not provided.
+          if [ -n "${STORE_TYPE:-}" ]; then
+            echo "SS_SIGNING_STORE_TYPE=$STORE_TYPE" >> "$GITHUB_ENV"
+          else
+            echo "SS_SIGNING_STORE_TYPE=PKCS12" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build Web Assets
+        if: steps.exists.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm android:web-build
+
+      - name: Build Signed Release APKs
+        if: steps.exists.outputs.skip != 'true'
+        env:
+          SS_SIGNING_STORE_PASSWORD: ${{ secrets.SS_SIGNING_STORE_PASSWORD }}
+          SS_SIGNING_KEY_ALIAS: ${{ secrets.SS_SIGNING_KEY_ALIAS }}
+          SS_SIGNING_KEY_PASSWORD: ${{ secrets.SS_SIGNING_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android-tv-host
+          ./gradlew :app:assembleMobileRelease :app:assembleTvRelease
+
+      - name: Prepare Dist
+        if: steps.exists.outputs.skip != 'true'
+        id: dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version_name }}"
+          mkdir -p dist
+
+          MOBILE_APK="$(ls -1 apps/android-tv-host/app/build/outputs/apk/mobile/release/*.apk | head -n 1)"
+          TV_APK="$(ls -1 apps/android-tv-host/app/build/outputs/apk/tv/release/*.apk | head -n 1)"
+          if [ -z "$MOBILE_APK" ] || [ -z "$TV_APK" ]; then
+            echo "Could not locate release APK outputs for mobile/tv."
+            exit 1
+          fi
+
+          OUT_MOBILE="dist/StremioShell-mobile-${VERSION}.apk"
+          OUT_TV="dist/StremioShell-tv-${VERSION}.apk"
+          cp "$MOBILE_APK" "$OUT_MOBILE"
+          cp "$TV_APK" "$OUT_TV"
+
+          {
+            echo "apk_files<<EOF"
+            echo "$OUT_MOBILE"
+            echo "$OUT_TV"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Extract Release Notes
+        if: steps.exists.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/extract_changelog_section.js "${{ steps.ver.outputs.version_name }}" > dist/release-notes.md
+
+      - name: Create GitHub Release
+        if: steps.exists.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version_name }}
+          name: v${{ steps.ver.outputs.version_name }}
+          body_path: dist/release-notes.md
+          files: ${{ steps.dist.outputs.apk_files }}
+          draft: false
+          prerelease: false

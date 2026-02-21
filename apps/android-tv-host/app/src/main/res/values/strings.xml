@@ -24,4 +24,21 @@
   <string name="playback_no_audio_tracks">No audio tracks available for this stream.</string>
   <string name="playback_no_subtitles">No subtitles available for this stream.</string>
   <string name="playback_video_mode_changed">Video mode updated</string>
+  <string name="check_updates_button">Check updates</string>
+  <string name="check_updates_in_progress">Checking for updates...</string>
+  <string name="check_updates_none">You are on the latest version.</string>
+  <string name="check_updates_unavailable_debug">Update checks are disabled in debug builds.</string>
+  <string name="check_updates_failed">Could not check for updates right now.</string>
+  <string name="update_available_title">Update available: %1$s</string>
+  <string name="update_download_button">Download</string>
+  <string name="update_view_release_button">View release</string>
+  <string name="update_install_button">Install</string>
+  <string name="update_enable_installs_button">Enable installs</string>
+  <string name="update_later_button">Later</string>
+  <string name="update_download_started">Downloading Stremio Shell %1$s in the background.</string>
+  <string name="update_download_failed">Update download failed. Please try again.</string>
+  <string name="update_download_ready_title">Update downloaded</string>
+  <string name="update_download_ready_message">Stremio Shell %1$s is ready to install.</string>
+  <string name="update_enable_installs_message">To install this update, Android needs one-time permission to install apps from Stremio Shell.</string>
+  <string name="update_install_failed">Could not open installer. Please re-download the update.</string>
 </resources>

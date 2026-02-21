@@ -6,10 +6,29 @@ plugins {
   id("org.jetbrains.kotlin.android")
 }
 
+// Optional CI signing. If these env vars are present, `assemble...Release` will produce signed APKs.
+val ssSigningStoreFile = System.getenv("SS_SIGNING_STORE_FILE")
+val ssSigningStorePassword = System.getenv("SS_SIGNING_STORE_PASSWORD")
+val ssSigningKeyAlias = System.getenv("SS_SIGNING_KEY_ALIAS")
+val ssSigningKeyPassword = System.getenv("SS_SIGNING_KEY_PASSWORD")
+val ssSigningStoreType = System.getenv("SS_SIGNING_STORE_TYPE") // e.g. "PKCS12" or "JKS"
+val ssHasSigning = !ssSigningStoreFile.isNullOrBlank() &&
+  !ssSigningStorePassword.isNullOrBlank() &&
+  !ssSigningKeyAlias.isNullOrBlank() &&
+  !ssSigningKeyPassword.isNullOrBlank()
+
 val debugWebAppUrl = (project.findProperty("webAppUrl") as String?)
   ?.trim()
   .orEmpty()
   .ifBlank { "" }
+val githubReleaseOwner = (project.findProperty("githubReleaseOwner") as String?)
+  ?.trim()
+  .orEmpty()
+  .ifBlank { "Robertg761" }
+val githubReleaseRepo = (project.findProperty("githubReleaseRepo") as String?)
+  ?.trim()
+  .orEmpty()
+  .ifBlank { "stremio-shell" }
 
 android {
   namespace = "com.stremioshell.host"
@@ -21,6 +40,8 @@ android {
     targetSdk = 34
     versionCode = 1
     versionName = "0.1.0"
+    buildConfigField("String", "GITHUB_RELEASE_OWNER", "\"$githubReleaseOwner\"")
+    buildConfigField("String", "GITHUB_RELEASE_REPO", "\"$githubReleaseRepo\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -43,6 +64,20 @@ android {
     }
   }
 
+  if (ssHasSigning) {
+    signingConfigs {
+      create("release") {
+        storeFile = file(ssSigningStoreFile!!)
+        if (!ssSigningStoreType.isNullOrBlank()) {
+          storeType = ssSigningStoreType
+        }
+        storePassword = ssSigningStorePassword
+        keyAlias = ssSigningKeyAlias
+        keyPassword = ssSigningKeyPassword
+      }
+    }
+  }
+
   buildTypes {
     debug {
       buildConfigField("String", "WEB_APP_URL", "\"$debugWebAppUrl\"")
@@ -54,6 +89,9 @@ android {
         getDefaultProguardFile("proguard-android-optimize.txt"),
         "proguard-rules.pro"
       )
+      if (ssHasSigning) {
+        signingConfig = signingConfigs.getByName("release")
+      }
       buildConfigField("String", "WEB_APP_URL", "\"\"")
       buildConfigField("String", "WEB_REMOTE_FALLBACK_URL", "\"https://web.stremio.com/\"")
     }

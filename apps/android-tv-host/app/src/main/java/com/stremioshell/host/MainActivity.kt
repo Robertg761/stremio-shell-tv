@@ -1,5 +1,7 @@
 package com.stremioshell.host
 
+import android.app.AlertDialog
+import android.app.DownloadManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -30,6 +32,9 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewAssetLoader
+import com.stremioshell.host.update.ApkUpdateManager
+import com.stremioshell.host.update.UpdateInfo
+import com.stremioshell.host.update.UpdateRepository
 import java.io.ByteArrayInputStream
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -56,6 +61,7 @@ class MainActivity : AppCompatActivity() {
   private lateinit var startupActions: LinearLayout
   private lateinit var retryButton: Button
   private lateinit var exportDiagnosticsButton: Button
+  private lateinit var checkUpdatesButton: Button
 
   private val bridgeName = "stremioHost"
   private val localShellUrl = "https://appassets.androidplatform.net/assets/web/index.html"
@@ -84,6 +90,12 @@ class MainActivity : AppCompatActivity() {
   private val nativeFallbackLoopGuard = NativePlaybackLoopGuard()
   private val pendingEvents = mutableListOf<String>()
   private val diagnostics = ArrayDeque<String>()
+  private val updateRepository = UpdateRepository()
+  private val apkUpdateManager = ApkUpdateManager()
+  private var updateCheckInFlight = false
+  private var promptedDownloadedVersion: String? = null
+  private var activeUpdateDialog: AlertDialog? = null
+  private var updateReceiverRegistered = false
   private val startupTimeoutRunnable = Runnable {
     if (startupCompleted) {
       return@Runnable
@@ -108,6 +120,28 @@ class MainActivity : AppCompatActivity() {
       emitHostEventJson(eventJson)
     }
   }
+  private val updateDownloadReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+      if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) {
+        return
+      }
+
+      val completedDownloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+      val trackedDownloadId = apkUpdateManager.getActiveDownloadId(this@MainActivity)
+      if (completedDownloadId <= 0L || trackedDownloadId == null || completedDownloadId != trackedDownloadId) {
+        return
+      }
+
+      val result = apkUpdateManager.queryDownload(this@MainActivity)
+      if (result?.status == DownloadManager.STATUS_SUCCESSFUL) {
+        appendDiagnostic("Update download completed id=$completedDownloadId.")
+        maybePromptForDownloadedUpdate(force = true)
+      } else {
+        appendDiagnostic("Update download failed id=$completedDownloadId reason=${result?.reason}.")
+        Toast.makeText(this@MainActivity, getString(R.string.update_download_failed), Toast.LENGTH_LONG).show()
+      }
+    }
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -123,9 +157,13 @@ class MainActivity : AppCompatActivity() {
     startupActions = findViewById(R.id.startupActions)
     retryButton = findViewById(R.id.retryButton)
     exportDiagnosticsButton = findViewById(R.id.exportDiagnosticsButton)
+    checkUpdatesButton = findViewById(R.id.checkUpdatesButton)
 
     initializeStartupOverlay()
     configureWebView()
+    checkUpdatesButton.setOnClickListener {
+      checkForUpdates(manual = true)
+    }
 
     networkMonitor = NetworkMonitor(this) { connected, transport ->
       runOnUiThread {
@@ -137,9 +175,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     registerPlaybackEvents()
+    registerUpdateDownloadReceiver()
     setupBackHandling()
     loadShell()
     handleDeepLink(intent)
+    maybePromptForDownloadedUpdate(force = false)
+    checkForUpdates(manual = false)
 
     emitLifecycle("created")
     appendDiagnostic("MainActivity created for ${if (BuildConfig.IS_TV) "tv" else "mobile"} flavor.")
@@ -162,6 +203,7 @@ class MainActivity : AppCompatActivity() {
     requestAudioFocus()
     applyWebMediaAudioGuard()
     appendAudioStateDiagnostic("onResume")
+    maybePromptForDownloadedUpdate(force = false)
     emitLifecycle("resumed")
   }
 
@@ -181,6 +223,11 @@ class MainActivity : AppCompatActivity() {
     startupHandler.removeCallbacksAndMessages(null)
     abandonAudioFocus()
     emitLifecycle("destroyed")
+    activeUpdateDialog?.dismiss()
+    if (updateReceiverRegistered) {
+      unregisterReceiver(updateDownloadReceiver)
+      updateReceiverRegistered = false
+    }
     unregisterReceiver(playbackEventReceiver)
     webView.removeJavascriptInterface(bridgeName)
     webView.destroy()
@@ -277,6 +324,202 @@ class MainActivity : AppCompatActivity() {
       IntentFilter(PlaybackBridge.ACTION_PLAYBACK_EVENT),
       ContextCompat.RECEIVER_NOT_EXPORTED
     )
+  }
+
+  private fun registerUpdateDownloadReceiver() {
+    ContextCompat.registerReceiver(
+      this,
+      updateDownloadReceiver,
+      IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+      ContextCompat.RECEIVER_NOT_EXPORTED
+    )
+    updateReceiverRegistered = true
+  }
+
+  private fun checkForUpdates(manual: Boolean) {
+    if (updateCheckInFlight) {
+      if (manual) {
+        Toast.makeText(this, getString(R.string.check_updates_in_progress), Toast.LENGTH_SHORT).show()
+      }
+      return
+    }
+    if (BuildConfig.DEBUG) {
+      if (manual) {
+        Toast.makeText(this, getString(R.string.check_updates_unavailable_debug), Toast.LENGTH_SHORT).show()
+      }
+      return
+    }
+
+    val owner = BuildConfig.GITHUB_RELEASE_OWNER.trim()
+    val repo = BuildConfig.GITHUB_RELEASE_REPO.trim()
+    if (owner.isBlank() || repo.isBlank()) {
+      appendDiagnostic("Skipping update check because release repo is not configured.")
+      if (manual) {
+        Toast.makeText(this, getString(R.string.check_updates_failed), Toast.LENGTH_SHORT).show()
+      }
+      return
+    }
+
+    updateCheckInFlight = true
+    Thread {
+      val result = runCatching {
+        updateRepository.checkForUpdate(
+          owner = owner,
+          repo = repo,
+          currentVersionName = BuildConfig.VERSION_NAME,
+          isTvFlavor = BuildConfig.IS_TV
+        )
+      }
+
+      runOnUiThread {
+        updateCheckInFlight = false
+        if (isFinishing || isDestroyed) {
+          return@runOnUiThread
+        }
+        result.exceptionOrNull()?.let { error ->
+          appendDiagnostic("Update check failed: ${error.message}")
+          if (manual) {
+            Toast.makeText(this, getString(R.string.check_updates_failed), Toast.LENGTH_SHORT).show()
+          }
+        }
+        val info = result.getOrNull()
+        if (info != null) {
+          maybeShowUpdateAvailableDialog(info)
+        } else if (manual) {
+          Toast.makeText(this, getString(R.string.check_updates_none), Toast.LENGTH_SHORT).show()
+        }
+      }
+    }.start()
+  }
+
+  private fun maybeShowUpdateAvailableDialog(info: UpdateInfo) {
+    if (apkUpdateManager.hasDownloadedApkForVersion(this, info.latestVersionName)) {
+      maybePromptForDownloadedUpdate(force = true)
+      return
+    }
+    if (activeUpdateDialog?.isShowing == true) {
+      return
+    }
+
+    val releaseNotes = info.releaseNotes.trim()
+    val summary = releaseNotes
+      .lineSequence()
+      .filter { it.isNotBlank() }
+      .take(6)
+      .joinToString(separator = "\n")
+      .ifBlank { "A newer build is available on GitHub Releases." }
+    val suffix = if (releaseNotes.length > summary.length) "\n\n..." else ""
+    val publishedAt = info.publishedAt?.let { "\nPublished: $it" } ?: ""
+    val message = buildString {
+      append(summary)
+      append(suffix)
+      append(publishedAt)
+    }
+
+    activeUpdateDialog = AlertDialog.Builder(this)
+      .setTitle(getString(R.string.update_available_title, info.latestVersionName))
+      .setMessage(message)
+      .setPositiveButton(R.string.update_download_button) { _, _ ->
+        startUpdateDownload(info)
+      }
+      .setNeutralButton(R.string.update_view_release_button) { _, _ ->
+        info.releaseUrl.takeIf { it.isNotBlank() }?.let { releaseUrl ->
+          openExternalUrl(JSONObject().put("url", releaseUrl))
+        }
+      }
+      .setNegativeButton(R.string.update_later_button, null)
+      .setOnDismissListener {
+        activeUpdateDialog = null
+      }
+      .show()
+  }
+
+  private fun startUpdateDownload(info: UpdateInfo) {
+    runCatching {
+      apkUpdateManager.clearDownloadedState(this, deleteApk = true)
+      val downloadId = apkUpdateManager.startDownload(this, info)
+      appendDiagnostic("Started update download id=$downloadId version=${info.latestVersionName}.")
+      Toast.makeText(
+        this,
+        getString(R.string.update_download_started, info.latestVersionName),
+        Toast.LENGTH_LONG
+      ).show()
+    }.onFailure {
+      appendDiagnostic("Failed to start update download: ${it.message}")
+      Toast.makeText(this, getString(R.string.update_download_failed), Toast.LENGTH_LONG).show()
+    }
+  }
+
+  private fun maybePromptForDownloadedUpdate(force: Boolean) {
+    if (!apkUpdateManager.hasPendingDownloadedUpdate(this, BuildConfig.VERSION_NAME)) {
+      return
+    }
+
+    val downloadedVersion = apkUpdateManager.getDownloadedVersionName(this) ?: return
+    if (!force && promptedDownloadedVersion == downloadedVersion) {
+      return
+    }
+    promptedDownloadedVersion = downloadedVersion
+
+    if (apkUpdateManager.needsUnknownSourcesPermission(this)) {
+      showEnableUnknownSourcesDialog(downloadedVersion)
+    } else {
+      showInstallDownloadedUpdateDialog(downloadedVersion)
+    }
+  }
+
+  private fun showEnableUnknownSourcesDialog(version: String) {
+    if (activeUpdateDialog?.isShowing == true) {
+      return
+    }
+    activeUpdateDialog = AlertDialog.Builder(this)
+      .setTitle(getString(R.string.update_download_ready_title))
+      .setMessage(
+        getString(R.string.update_download_ready_message, version) +
+          "\n\n" +
+          getString(R.string.update_enable_installs_message)
+      )
+      .setPositiveButton(R.string.update_enable_installs_button) { _, _ ->
+        startActivity(apkUpdateManager.buildUnknownSourcesSettingsIntent(this))
+      }
+      .setNegativeButton(R.string.update_later_button, null)
+      .setOnDismissListener {
+        activeUpdateDialog = null
+      }
+      .show()
+  }
+
+  private fun showInstallDownloadedUpdateDialog(version: String) {
+    if (activeUpdateDialog?.isShowing == true) {
+      return
+    }
+    activeUpdateDialog = AlertDialog.Builder(this)
+      .setTitle(getString(R.string.update_download_ready_title))
+      .setMessage(getString(R.string.update_download_ready_message, version))
+      .setPositiveButton(R.string.update_install_button) { _, _ ->
+        launchDownloadedInstaller()
+      }
+      .setNegativeButton(R.string.update_later_button, null)
+      .setOnDismissListener {
+        activeUpdateDialog = null
+      }
+      .show()
+  }
+
+  private fun launchDownloadedInstaller() {
+    val installIntent = apkUpdateManager.buildInstallIntentFromDownloadedApk(this)
+    if (installIntent != null) {
+      startActivity(installIntent)
+      return
+    }
+
+    if (apkUpdateManager.needsUnknownSourcesPermission(this)) {
+      val version = apkUpdateManager.getDownloadedVersionName(this) ?: "latest"
+      showEnableUnknownSourcesDialog(version)
+      return
+    }
+
+    Toast.makeText(this, getString(R.string.update_install_failed), Toast.LENGTH_LONG).show()
   }
 
   private fun setupBackHandling() {
