@@ -1,6 +1,6 @@
-# Android + Google TV Host
+# Android TV Host
 
-This folder now contains a functional Android host app that supports both phone/tablet (`mobile`) and Android TV (`tv`) variants from one codebase.
+This folder contains the Android TV host app for Stremio Shell TV.
 
 ## Host bridge contract
 
@@ -10,18 +10,9 @@ Use `apps/android-tv-host/host-bridge-contract.json` as the source of truth for 
 - Envelope shape is `{ type, version, payload, timestampMs }`.
 - Payloads must remain JSON-serializable.
 
-## Planned implementation
-
-1. Create an Android app shell (`minSdk 26+`) with a full-screen WebView.
-2. Load the built shell bundle from local assets for release.
-3. Add Android TV focus strategy (D-pad traversal, visible focus states).
-4. Map native lifecycle and connectivity events into JS host bridge.
-5. Integrate playback handoff to ExoPlayer or native media APIs.
-
 ## What is implemented
 
-- `mobile` and `tv` product flavors, producing two installable apps:
-  - `com.stremioshell.host.mobile`
+- `tv` flavor app package:
   - `com.stremioshell.host.tv`
 - Full-screen WebView host loading:
   - Debug default: bundled `apps/web/dist` shell (override with `-PwebAppUrl=...` when needed).
@@ -58,21 +49,18 @@ Build steps:
 # 1) Build web assets used by Android release/debug fallback
 pnpm --filter @stremio-shell/web build
 
-# 2) Build Android variants
+# 2) Build Android TV variant
 cd apps/android-tv-host
-.\gradlew.bat :app:assembleMobileDebug
 .\gradlew.bat :app:assembleTvDebug
-.\gradlew.bat :app:assembleMobileDebug -PwebAppUrl=http://10.0.2.2:5173
+.\gradlew.bat :app:assembleTvDebug -PwebAppUrl=http://10.0.2.2:5173
 ```
 
 Install to connected device/emulator:
 
 ```powershell
-.\gradlew.bat :app:installMobileDebug
 .\gradlew.bat :app:installTvDebug
 ```
 
 ## Flavor behavior
 
-- `mobile` flavor has standard launcher category.
 - `tv` flavor has Leanback launcher category and TV banner.

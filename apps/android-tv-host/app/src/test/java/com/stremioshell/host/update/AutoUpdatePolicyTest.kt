@@ -6,8 +6,8 @@ import org.junit.Test
 class AutoUpdatePolicyTest {
   private val sampleUpdate = UpdateInfo(
     latestVersionName = "0.2.0",
-    apkName = "StremioShell-mobile-0.2.0.apk",
-    apkUrl = "https://example.invalid/mobile.apk"
+    apkName = "StremioShell-tv-0.2.0.apk",
+    apkUrl = "https://example.invalid/tv.apk"
   )
 
   @Test

@@ -17,7 +17,6 @@ const mode = process.argv[2] ?? "build";
 const excludedMirrorEntries = new Set(["node_modules", "build", "dist", ".git", ".install-hash"]);
 const overlayRoots = [
   path.resolve(webRoot, "src", "patches", "shared", "upstream-overrides"),
-  path.resolve(webRoot, "src", "patches", "phone", "upstream-overrides"),
   path.resolve(webRoot, "src", "patches", "tv", "upstream-overrides")
 ];
 

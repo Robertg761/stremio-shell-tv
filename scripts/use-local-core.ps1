@@ -20,7 +20,7 @@ try {
     throw "No npm package archive found after npm pack"
   }
 
-  $target = "g:\Projects\Current Work in Progress Projects\stremio-shell\packages\core-bridge"
+  $target = "g:\Projects\Current Work in Progress Projects\stremio-shell-tv\packages\core-bridge"
   Push-Location $target
   try {
     $packageFile = "file:$($coreWeb)\$($tgz.Name)"

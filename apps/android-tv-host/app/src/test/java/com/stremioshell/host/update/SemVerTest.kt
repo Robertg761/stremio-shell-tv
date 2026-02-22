@@ -8,7 +8,7 @@ import org.junit.Test
 class SemVerTest {
   @Test
   fun `parseOrNull accepts flavor suffixed version strings`() {
-    val parsed = SemVer.parseOrNull("0.1.0-mobile")
+    val parsed = SemVer.parseOrNull("0.1.0-tv")
     assertNotNull(parsed)
     assertEquals(0, parsed?.major)
     assertEquals(1, parsed?.minor)

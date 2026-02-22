@@ -1,14 +1,13 @@
-# stremio-shell
+# stremio-shell-tv
 
-Monorepo shell project for building a custom Stremio client with an Android/Google TV-first strategy and desktop hosts as secondary targets.
+TV-focused monorepo for building a custom Stremio client with an Android/Google TV-first strategy.
 
 ## Repo layout
 
-- `apps/web`: Staged upstream `stremio-web` bootstrap with shell patch overlays under `apps/web/src/patches/*`.
+- `apps/web`: Staged upstream `stremio-web` bootstrap with shell patch overlays under `apps/web/src/patches/{shared,tv}`.
 - `packages/core-bridge`: Typed wrapper around `@stremio/stremio-core-web` runtime APIs.
-- `apps/android-tv-host`: Android/Google TV host integration notes and scripts.
-- `apps/desktop-host`: Desktop host strategy (Tauri/Electron) notes and scripts.
-- `docs`: ADRs, roadmap, and management conventions.
+- `apps/android-tv-host`: Android/Google TV host integration code.
+- `docs`: Contracts and quality gate docs.
 
 ## Quick start
 
@@ -19,7 +18,7 @@ pnpm dev
 
 Open the web shell at `https://localhost:5173`.
 
-## Android builds (mobile + TV)
+## Android TV builds
 
 Set Android SDK/AVD paths to `G:` (current shell session):
 
@@ -29,43 +28,33 @@ powershell -ExecutionPolicy Bypass -File scripts/setup-android-env.ps1
 
 ```powershell
 pnpm android:web-build
-pnpm android:mobile:assemble
 pnpm android:tv:assemble
 ```
 
-Install artifacts with:
+Install artifact:
 
-- `apps/android-tv-host\app\build\outputs\apk\mobile\debug\app-mobile-debug.apk`
 - `apps/android-tv-host\app\build\outputs\apk\tv\debug\app-tv-debug.apk`
 
-## GitHub release updates (LunarLog-style)
+## GitHub release updates
 
-This repo now includes `.github/workflows/release.yml`, modeled after your LunarLog release flow and adapted for `stremio-shell`.
+This repo includes `.github/workflows/release.yml` for TV-only releases.
 
 How it works:
 
-1. Trigger on `main` pushes when release-related files change (`apps/android-tv-host/app/build.gradle.kts`, `CHANGELOG.md`, release scripts/workflow), or run manually via `workflow_dispatch`.
+1. Trigger on `main` pushes when release files change, or run manually via `workflow_dispatch`.
 2. Read app version from `apps/android-tv-host/app/build.gradle.kts`.
 3. Build web assets (`pnpm android:web-build`).
-4. Build Android release APKs for both flavors:
-   - `mobile`
-   - `tv`
-5. Create GitHub Release `v<version>` and upload:
-   - `StremioShell-mobile-<version>.apk`
-   - `StremioShell-tv-<version>.apk`
-
-GitHub release workflow currently builds unsigned release APKs by default.
+4. Build Android release APK for `tv`.
+5. Create GitHub Release `v<version>` and upload `StremioShell-tv-<version>.apk`.
 
 In-app updater behavior:
 
 - Android host performs silent GitHub Releases checks on startup and via hourly background work in release builds.
-- Android host supports manual checks from in-app Settings (`Info` on mobile, `General` on desktop -> `Check for updates`).
-- If a newer release exists, it auto-downloads the matching flavor APK (`mobile` or `tv`) in the background.
-- When the download is ready, the app prompts `Install` (Android still requires system installer confirmation for sideloaded APKs).
+- If a newer release exists, it auto-downloads the TV APK in the background.
 - Debug builds do not perform automatic update checks.
-- Update source repo is configured in `apps/android-tv-host/app/build.gradle.kts` via:
+- Update source defaults in `apps/android-tv-host/app/build.gradle.kts`:
   - `githubReleaseOwner` (default: `Robertg761`)
-  - `githubReleaseRepo` (default: `stremio-shell`)
+  - `githubReleaseRepo` (default: `stremio-shell-tv`)
 - Override at build time if needed:
   - `-PgithubReleaseOwner=<owner> -PgithubReleaseRepo=<repo>`
 
@@ -102,14 +91,11 @@ The script packs your local fork and installs that package into `packages/core-b
 ## Delivery model
 
 - Primary target: Android + Google TV (`apps/android-tv-host`).
-- Secondary target: Windows + macOS (`apps/desktop-host`).
 - Shared runtime contract: `packages/core-bridge`.
 
 Read these documents for execution governance:
 
-- `docs/roadmap.md`
 - `docs/contracts/core-bridge.md`
 - `docs/contracts/host-bridge.md`
 - `docs/quality-gates.md`
-- `docs/project-tracking.md`
 - `docs/upstream-sync.md`

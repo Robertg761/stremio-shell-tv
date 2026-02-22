@@ -120,7 +120,7 @@ jobs:
           set -euo pipefail
           cd apps/android-tv-host
           chmod +x ./gradlew
-          ./gradlew :app:assembleMobileRelease :app:assembleTvRelease
+          ./gradlew :app:assembleTvRelease
 
       - name: Prepare Dist
         if: steps.exists.outputs.skip != 'true'
@@ -131,21 +131,17 @@ jobs:
           VERSION="${{ steps.ver.outputs.version_name }}"
           mkdir -p dist
 
-          MOBILE_APK="$(ls -1 apps/android-tv-host/app/build/outputs/apk/mobile/release/*.apk | head -n 1)"
           TV_APK="$(ls -1 apps/android-tv-host/app/build/outputs/apk/tv/release/*.apk | head -n 1)"
-          if [ -z "$MOBILE_APK" ] || [ -z "$TV_APK" ]; then
-            echo "Could not locate release APK outputs for mobile/tv."
+          if [ -z "$TV_APK" ]; then
+            echo "Could not locate tv release APK output."
             exit 1
           fi
 
-          OUT_MOBILE="dist/StremioShell-mobile-${VERSION}.apk"
           OUT_TV="dist/StremioShell-tv-${VERSION}.apk"
-          cp "$MOBILE_APK" "$OUT_MOBILE"
           cp "$TV_APK" "$OUT_TV"
 
           {
             echo "apk_files<<EOF"
-            echo "$OUT_MOBILE"
             echo "$OUT_TV"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"

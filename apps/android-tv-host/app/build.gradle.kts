@@ -28,7 +28,7 @@ val githubReleaseOwner = (project.findProperty("githubReleaseOwner") as String?)
 val githubReleaseRepo = (project.findProperty("githubReleaseRepo") as String?)
   ?.trim()
   .orEmpty()
-  .ifBlank { "stremio-shell" }
+  .ifBlank { "stremio-shell-tv" }
 
 android {
   namespace = "com.stremioshell.host"
@@ -48,13 +48,6 @@ android {
 
   flavorDimensions += "device"
   productFlavors {
-    create("mobile") {
-      dimension = "device"
-      applicationIdSuffix = ".mobile"
-      versionNameSuffix = "-mobile"
-      resValue("string", "app_name", "Stremio Shell Mobile")
-      buildConfigField("boolean", "IS_TV", "false")
-    }
     create("tv") {
       dimension = "device"
       applicationIdSuffix = ".tv"
