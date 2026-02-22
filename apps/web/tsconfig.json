@@ -4,5 +4,8 @@
     "types": ["vite/client"],
     "baseUrl": "."
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/patches/**/upstream-overrides/**"
+  ]
 }

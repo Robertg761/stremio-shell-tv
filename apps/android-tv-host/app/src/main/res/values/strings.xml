@@ -24,7 +24,6 @@
   <string name="playback_no_audio_tracks">No audio tracks available for this stream.</string>
   <string name="playback_no_subtitles">No subtitles available for this stream.</string>
   <string name="playback_video_mode_changed">Video mode updated</string>
-  <string name="check_updates_button">Check updates</string>
   <string name="check_updates_in_progress">Checking for updates...</string>
   <string name="check_updates_none">You are on the latest version.</string>
   <string name="check_updates_unavailable_debug">Update checks are disabled in debug builds.</string>

@@ -61,7 +61,6 @@ class MainActivity : AppCompatActivity() {
   private lateinit var startupActions: LinearLayout
   private lateinit var retryButton: Button
   private lateinit var exportDiagnosticsButton: Button
-  private lateinit var checkUpdatesButton: Button
 
   private val bridgeName = "stremioHost"
   private val localShellUrl = "https://appassets.androidplatform.net/assets/web/index.html"
@@ -157,13 +156,9 @@ class MainActivity : AppCompatActivity() {
     startupActions = findViewById(R.id.startupActions)
     retryButton = findViewById(R.id.retryButton)
     exportDiagnosticsButton = findViewById(R.id.exportDiagnosticsButton)
-    checkUpdatesButton = findViewById(R.id.checkUpdatesButton)
 
     initializeStartupOverlay()
     configureWebView()
-    checkUpdatesButton.setOnClickListener {
-      checkForUpdates(manual = true)
-    }
 
     networkMonitor = NetworkMonitor(this) { connected, transport ->
       runOnUiThread {
@@ -606,6 +601,7 @@ class MainActivity : AppCompatActivity() {
             "playback.close" -> PlaybackBridge.requestPlaybackClose(this)
             "external.openUrl" -> openExternalUrl(envelope.payload)
             "diagnostics.export" -> exportDiagnostics()
+            "updates.check" -> checkForUpdates(manual = true)
             else -> {
               appendDiagnostic("Ignoring unsupported command: ${envelope.type}")
             }
