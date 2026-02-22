@@ -168,6 +168,7 @@ jobs:
         run: |
           set -euo pipefail
           cd apps/android-tv-host
+          chmod +x ./gradlew
           ./gradlew :app:assembleMobileRelease :app:assembleTvRelease
 
       - name: Prepare Dist
