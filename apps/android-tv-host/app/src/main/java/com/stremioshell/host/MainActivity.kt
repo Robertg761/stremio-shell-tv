@@ -14,6 +14,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.WebSettings
@@ -232,6 +234,24 @@ class MainActivity : AppCompatActivity() {
     super.onDestroy()
   }
 
+  override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    if (BuildConfig.IS_TV) {
+      if (BuildConfig.DEBUG && event.action == KeyEvent.ACTION_DOWN) {
+        appendDiagnostic("TV key event passthrough code=${event.keyCode} webReady=$webReady")
+      }
+    }
+
+    return super.dispatchKeyEvent(event)
+  }
+
+  override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+    if (BuildConfig.IS_TV && event.action == MotionEvent.ACTION_SCROLL) {
+      // Prevent touchpad/rotary scroll gestures from scrolling WebView content on TV.
+      return true
+    }
+    return super.dispatchGenericMotionEvent(event)
+  }
+
   private fun configureWebView() {
     assetLoader = WebViewAssetLoader.Builder()
       .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
@@ -243,6 +263,12 @@ class MainActivity : AppCompatActivity() {
       mediaPlaybackRequiresUserGesture = false
       allowFileAccess = true
       mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+      if (BuildConfig.IS_TV) {
+        val currentUserAgent = userAgentString.orEmpty()
+        if (!currentUserAgent.contains("Android TV")) {
+          userAgentString = "$currentUserAgent StremioShellTV Android TV"
+        }
+      }
     }
 
     webView.webChromeClient = object : WebChromeClient() {
@@ -579,6 +605,7 @@ class MainActivity : AppCompatActivity() {
       appendDiagnostic("Loading debug web shell from ${BuildConfig.WEB_APP_URL}")
       shellSource = if (usingLocalDebugServer) "debug" else "remote"
       webView.loadUrl(BuildConfig.WEB_APP_URL)
+      requestWebViewFocusIfTv()
       return
     }
 
@@ -591,6 +618,7 @@ class MainActivity : AppCompatActivity() {
     shellSource = "bundled"
     webReady = false
     webView.loadUrl(localShellUrl)
+    requestWebViewFocusIfTv()
   }
 
   private fun loadRemoteFallback(reason: String) {
@@ -609,6 +637,7 @@ class MainActivity : AppCompatActivity() {
     appendDiagnostic("Loading remote fallback shell due to $reason -> $fallbackUrl")
     Toast.makeText(this, "Local shell unavailable, loading fallback.", Toast.LENGTH_SHORT).show()
     webView.loadUrl(fallbackUrl)
+    requestWebViewFocusIfTv()
   }
 
   private fun handleDeepLink(intent: Intent?) {
@@ -828,7 +857,14 @@ class MainActivity : AppCompatActivity() {
     startupCompleted = true
     startupHandler.removeCallbacks(startupTimeoutRunnable)
     startupOverlay.visibility = View.GONE
+    requestWebViewFocusIfTv()
     appendDiagnostic("Startup completed with source=$shellSource.")
+  }
+
+  private fun requestWebViewFocusIfTv() {
+    if (BuildConfig.IS_TV) {
+      webView.requestFocus()
+    }
   }
 
   private fun showStartupLoading(title: String, message: String) {
@@ -931,6 +967,7 @@ class MainActivity : AppCompatActivity() {
       runOnUiThread {
         appendDiagnostic("Loading fallback web route: $resolvedFallbackUrl")
         webView.loadUrl(resolvedFallbackUrl)
+        requestWebViewFocusIfTv()
       }
       return
     }
