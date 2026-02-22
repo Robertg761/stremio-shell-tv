@@ -47,23 +47,14 @@ How it works:
 1. Trigger on `main` pushes when release-related files change (`apps/android-tv-host/app/build.gradle.kts`, `CHANGELOG.md`, release scripts/workflow), or run manually via `workflow_dispatch`.
 2. Read app version from `apps/android-tv-host/app/build.gradle.kts`.
 3. Build web assets (`pnpm android:web-build`).
-4. Build signed Android release APKs for both flavors:
+4. Build Android release APKs for both flavors:
    - `mobile`
    - `tv`
 5. Create GitHub Release `v<version>` and upload:
    - `StremioShell-mobile-<version>.apk`
    - `StremioShell-tv-<version>.apk`
 
-Required GitHub repository secrets:
-
-- `SS_KEYSTORE_B64`
-- `SS_SIGNING_STORE_PASSWORD`
-- `SS_SIGNING_KEY_ALIAS`
-- `SS_SIGNING_KEY_PASSWORD`
-
-Optional:
-
-- `SS_SIGNING_STORE_TYPE` (defaults to `PKCS12` in CI)
+GitHub release workflow currently builds unsigned release APKs by default.
 
 In-app updater behavior:
 

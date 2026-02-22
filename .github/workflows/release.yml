@@ -21,11 +21,6 @@ on:
         required: false
         type: string
         default: "beta.1"
-      require_signing:
-        description: "Require signing secrets (set false for unsigned test builds)"
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -78,12 +73,9 @@ jobs:
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             SUFFIX="${{ inputs.tag_suffix }}"
             PRERELEASE="${{ inputs.prerelease }}"
-            REQUIRE_SIGNING="${{ inputs.require_signing }}"
           else
             SUFFIX=""
             PRERELEASE="false"
-            # Push-based releases are production path and should remain signed.
-            REQUIRE_SIGNING="true"
           fi
 
           if [ -n "$SUFFIX" ]; then
@@ -97,7 +89,6 @@ jobs:
           echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
-          echo "require_signing=$REQUIRE_SIGNING" >> "$GITHUB_OUTPUT"
 
       - name: Skip If Release Already Exists
         id: exists
@@ -114,42 +105,6 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Verify Signing Secrets
-        if: steps.exists.outputs.skip != 'true' && steps.meta.outputs.require_signing == 'true'
-        env:
-          KEYSTORE_B64: ${{ secrets.SS_KEYSTORE_B64 }}
-          STORE_PASSWORD: ${{ secrets.SS_SIGNING_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.SS_SIGNING_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.SS_SIGNING_KEY_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          missing=0
-          if [ -z "${KEYSTORE_B64:-}" ]; then echo "Missing secret: SS_KEYSTORE_B64"; missing=1; fi
-          if [ -z "${STORE_PASSWORD:-}" ]; then echo "Missing secret: SS_SIGNING_STORE_PASSWORD"; missing=1; fi
-          if [ -z "${KEY_ALIAS:-}" ]; then echo "Missing secret: SS_SIGNING_KEY_ALIAS"; missing=1; fi
-          if [ -z "${KEY_PASSWORD:-}" ]; then echo "Missing secret: SS_SIGNING_KEY_PASSWORD"; missing=1; fi
-          if [ "$missing" -ne 0 ]; then
-            exit 1
-          fi
-
-      - name: Decode Keystore
-        if: steps.exists.outputs.skip != 'true' && steps.meta.outputs.require_signing == 'true'
-        env:
-          KEYSTORE_B64: ${{ secrets.SS_KEYSTORE_B64 }}
-          STORE_TYPE: ${{ secrets.SS_SIGNING_STORE_TYPE }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/stremio-shell-keystore.jks"
-          echo "SS_SIGNING_STORE_FILE=$RUNNER_TEMP/stremio-shell-keystore.jks" >> "$GITHUB_ENV"
-          # Default to PKCS12 if a custom store type is not provided.
-          if [ -n "${STORE_TYPE:-}" ]; then
-            echo "SS_SIGNING_STORE_TYPE=$STORE_TYPE" >> "$GITHUB_ENV"
-          else
-            echo "SS_SIGNING_STORE_TYPE=PKCS12" >> "$GITHUB_ENV"
-          fi
-
       - name: Build Web Assets
         if: steps.exists.outputs.skip != 'true'
         shell: bash
@@ -160,10 +115,6 @@ jobs:
 
       - name: Build Release APKs
         if: steps.exists.outputs.skip != 'true'
-        env:
-          SS_SIGNING_STORE_PASSWORD: ${{ secrets.SS_SIGNING_STORE_PASSWORD }}
-          SS_SIGNING_KEY_ALIAS: ${{ secrets.SS_SIGNING_KEY_ALIAS }}
-          SS_SIGNING_KEY_PASSWORD: ${{ secrets.SS_SIGNING_KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
