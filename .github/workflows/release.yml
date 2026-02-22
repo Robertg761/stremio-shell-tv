@@ -155,6 +155,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          pnpm --filter @stremio-shell/core-bridge build
           pnpm android:web-build
 
       - name: Build Release APKs
