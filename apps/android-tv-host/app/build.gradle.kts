@@ -148,6 +148,7 @@ dependencies {
   implementation("com.google.android.material:material:1.12.0")
   implementation("androidx.webkit:webkit:1.11.0")
   implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.5")
+  implementation("androidx.work:work-runtime-ktx:2.9.1")
 
   implementation("androidx.media3:media3-exoplayer:1.4.1")
   implementation("androidx.media3:media3-ui:1.4.1")

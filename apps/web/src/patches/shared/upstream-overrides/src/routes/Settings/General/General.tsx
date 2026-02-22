@@ -4,18 +4,13 @@ import { Button } from 'stremio/components';
 import { useServices } from 'stremio/services';
 import { usePlatform, useToast } from 'stremio/common';
 import { Section, Option, Link } from '../components';
+import requestHostUpdateCheck from '../shared/requestHostUpdateCheck';
 import User from './User';
 import useDataExport from './useDataExport';
 import styles from './General.less';
 
 type Props = {
     profile: Profile,
-};
-
-type HostBridgeWindow = Window & {
-    stremioHost?: {
-        sendCommand?: (commandJson: string) => void,
-    },
 };
 
 const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
@@ -54,28 +49,7 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
     }, [profile.auth]);
 
     const onCheckForUpdates = useCallback(() => {
-        const hostBridge = (window as HostBridgeWindow).stremioHost;
-        if (!hostBridge || typeof hostBridge.sendCommand !== 'function') {
-            toast.show({
-                type: 'error',
-                title: t('SETTINGS_CHECK_FOR_UPDATES_UNAVAILABLE', { defaultValue: 'Update checks are not available on this platform.' }),
-                timeout: 5000
-            });
-            return;
-        }
-
-        hostBridge.sendCommand(JSON.stringify({
-            type: 'updates.check',
-            version: 1,
-            payload: { reason: 'manual' },
-            timestampMs: Date.now()
-        }));
-
-        toast.show({
-            type: 'success',
-            title: t('SETTINGS_CHECK_FOR_UPDATES_STARTED', { defaultValue: 'Checking for updates...' }),
-            timeout: 5000
-        });
+        requestHostUpdateCheck({ toast, t });
     }, [toast, t]);
 
     const onToggleTrakt = useCallback(() => {
@@ -138,10 +112,13 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
                 label={t('SETTINGS_SOURCE_CODE')}
                 href={`https://github.com/stremio/stremio-web/tree/${process.env.COMMIT_HASH}`}
             />
-            <Link
-                label={t('SETTINGS_CHECK_FOR_UPDATES', { defaultValue: 'Check for updates' })}
-                onClick={onCheckForUpdates}
-            />
+            {
+                !platform.isMobile &&
+                    <Link
+                        label={t('SETTINGS_CHECK_FOR_UPDATES', { defaultValue: 'Check for updates' })}
+                        onClick={onCheckForUpdates}
+                    />
+            }
             <Link
                 label={t('TERMS_OF_SERVICE')}
                 href={'https://www.stremio.com/tos'}
