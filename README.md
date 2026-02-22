@@ -67,9 +67,11 @@ Optional:
 
 In-app updater behavior:
 
-- Android host performs a silent GitHub Releases check on startup in release builds.
-- Android host supports manual checks from in-app Settings (`General` -> `Check for updates`).
-- If a newer release exists, it prompts to download and then install the matching flavor APK (`mobile` or `tv`).
+- Android host performs silent GitHub Releases checks on startup and via hourly background work in release builds.
+- Android host supports manual checks from in-app Settings (`Info` on mobile, `General` on desktop -> `Check for updates`).
+- If a newer release exists, it auto-downloads the matching flavor APK (`mobile` or `tv`) in the background.
+- When the download is ready, the app prompts `Install` (Android still requires system installer confirmation for sideloaded APKs).
+- Debug builds do not perform automatic update checks.
 - Update source repo is configured in `apps/android-tv-host/app/build.gradle.kts` via:
   - `githubReleaseOwner` (default: `Robertg761`)
   - `githubReleaseRepo` (default: `stremio-shell`)

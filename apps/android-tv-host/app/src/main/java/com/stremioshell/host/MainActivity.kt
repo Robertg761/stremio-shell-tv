@@ -33,8 +33,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewAssetLoader
 import com.stremioshell.host.update.ApkUpdateManager
+import com.stremioshell.host.update.AutoUpdatePolicy
 import com.stremioshell.host.update.UpdateInfo
 import com.stremioshell.host.update.UpdateRepository
+import com.stremioshell.host.update.UpdateWorkScheduler
 import java.io.ByteArrayInputStream
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -159,6 +161,7 @@ class MainActivity : AppCompatActivity() {
 
     initializeStartupOverlay()
     configureWebView()
+    UpdateWorkScheduler.ensureScheduled(this)
 
     networkMonitor = NetworkMonitor(this) { connected, transport ->
       runOnUiThread {
@@ -379,12 +382,40 @@ class MainActivity : AppCompatActivity() {
         }
         val info = result.getOrNull()
         if (info != null) {
-          maybeShowUpdateAvailableDialog(info)
+          if (manual) {
+            maybeShowUpdateAvailableDialog(info)
+          } else {
+            maybeAutoDownloadUpdate(info)
+          }
         } else if (manual) {
           Toast.makeText(this, getString(R.string.check_updates_none), Toast.LENGTH_SHORT).show()
         }
       }
     }.start()
+  }
+
+  private fun maybeAutoDownloadUpdate(info: UpdateInfo) {
+    val decision = AutoUpdatePolicy.decide(
+      updateInfo = info,
+      hasDownloadedForVersion = apkUpdateManager.hasDownloadedApkForVersion(this, info.latestVersionName),
+      hasActiveDownload = apkUpdateManager.getActiveDownloadId(this) != null
+    )
+
+    when (decision) {
+      AutoUpdatePolicy.Decision.NO_UPDATE -> return
+      AutoUpdatePolicy.Decision.DOWNLOAD_IN_PROGRESS -> {
+        appendDiagnostic("Background update download already in progress; skipping new request.")
+        return
+      }
+      AutoUpdatePolicy.Decision.ALREADY_DOWNLOADED -> {
+        appendDiagnostic("Update ${info.latestVersionName} already downloaded; prompting install.")
+        maybePromptForDownloadedUpdate(force = true)
+        return
+      }
+      AutoUpdatePolicy.Decision.START_DOWNLOAD -> {
+        startUpdateDownload(info, showUserFeedback = false)
+      }
+    }
   }
 
   private fun maybeShowUpdateAvailableDialog(info: UpdateInfo) {
@@ -429,19 +460,23 @@ class MainActivity : AppCompatActivity() {
       .show()
   }
 
-  private fun startUpdateDownload(info: UpdateInfo) {
+  private fun startUpdateDownload(info: UpdateInfo, showUserFeedback: Boolean = true) {
     runCatching {
       apkUpdateManager.clearDownloadedState(this, deleteApk = true)
       val downloadId = apkUpdateManager.startDownload(this, info)
       appendDiagnostic("Started update download id=$downloadId version=${info.latestVersionName}.")
-      Toast.makeText(
-        this,
-        getString(R.string.update_download_started, info.latestVersionName),
-        Toast.LENGTH_LONG
-      ).show()
+      if (showUserFeedback) {
+        Toast.makeText(
+          this,
+          getString(R.string.update_download_started, info.latestVersionName),
+          Toast.LENGTH_LONG
+        ).show()
+      }
     }.onFailure {
       appendDiagnostic("Failed to start update download: ${it.message}")
-      Toast.makeText(this, getString(R.string.update_download_failed), Toast.LENGTH_LONG).show()
+      if (showUserFeedback) {
+        Toast.makeText(this, getString(R.string.update_download_failed), Toast.LENGTH_LONG).show()
+      }
     }
   }
 
