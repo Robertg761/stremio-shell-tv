@@ -21,6 +21,11 @@ on:
         required: false
         type: string
         default: "beta.1"
+      require_signing:
+        description: "Require signing secrets (set false for unsigned test builds)"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -73,9 +78,12 @@ jobs:
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             SUFFIX="${{ inputs.tag_suffix }}"
             PRERELEASE="${{ inputs.prerelease }}"
+            REQUIRE_SIGNING="${{ inputs.require_signing }}"
           else
             SUFFIX=""
             PRERELEASE="false"
+            # Push-based releases are production path and should remain signed.
+            REQUIRE_SIGNING="true"
           fi
 
           if [ -n "$SUFFIX" ]; then
@@ -89,6 +97,7 @@ jobs:
           echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "require_signing=$REQUIRE_SIGNING" >> "$GITHUB_OUTPUT"
 
       - name: Skip If Release Already Exists
         id: exists
@@ -106,7 +115,7 @@ jobs:
           fi
 
       - name: Verify Signing Secrets
-        if: steps.exists.outputs.skip != 'true'
+        if: steps.exists.outputs.skip != 'true' && steps.meta.outputs.require_signing == 'true'
         env:
           KEYSTORE_B64: ${{ secrets.SS_KEYSTORE_B64 }}
           STORE_PASSWORD: ${{ secrets.SS_SIGNING_STORE_PASSWORD }}
@@ -125,7 +134,7 @@ jobs:
           fi
 
       - name: Decode Keystore
-        if: steps.exists.outputs.skip != 'true'
+        if: steps.exists.outputs.skip != 'true' && steps.meta.outputs.require_signing == 'true'
         env:
           KEYSTORE_B64: ${{ secrets.SS_KEYSTORE_B64 }}
           STORE_TYPE: ${{ secrets.SS_SIGNING_STORE_TYPE }}
@@ -148,7 +157,7 @@ jobs:
           set -euo pipefail
           pnpm android:web-build
 
-      - name: Build Signed Release APKs
+      - name: Build Release APKs
         if: steps.exists.outputs.skip != 'true'
         env:
           SS_SIGNING_STORE_PASSWORD: ${{ secrets.SS_SIGNING_STORE_PASSWORD }}
