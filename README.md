@@ -26,6 +26,12 @@ Set Android SDK/AVD paths to `G:` (current shell session):
 powershell -ExecutionPolicy Bypass -File scripts/setup-android-env.ps1
 ```
 
+For macOS + zsh, add this once in your shell profile:
+
+```zsh
+source /Users/robert/Documents/Projects/stremio-shell-tv/scripts/android-env.zsh
+```
+
 ```powershell
 pnpm android:web-build
 pnpm android:tv:assemble
