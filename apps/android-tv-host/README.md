@@ -26,10 +26,14 @@ Use `apps/android-tv-host/host-bridge-contract.json` as the source of truth for 
   - `playback.close`
   - `external.openUrl`
   - `diagnostics.export`
+  - `updates.check`
+  - `back.handled`
+    - Payload: `{ requestId, handled, reason? }`
 - Host event dispatch to web shell:
   - `lifecycle.changed`
   - `network.changed`
   - `back.pressed`
+    - Payload includes `requestId` for deterministic acknowledgement.
   - `deepLink.received`
   - `playback.result`
     - Optional fallback diagnostics fields: `fallbackTriggered`, `failureDomain`, `failureDetail`, `settingsDiagnostics`.

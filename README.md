@@ -104,4 +104,5 @@ Read these documents for execution governance:
 - `docs/contracts/core-bridge.md`
 - `docs/contracts/host-bridge.md`
 - `docs/quality-gates.md`
+- `docs/tv-qa-matrix.md`
 - `docs/upstream-sync.md`

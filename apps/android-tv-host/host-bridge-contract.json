@@ -17,12 +17,16 @@
     "playback.open",
     "playback.close",
     "external.openUrl",
-    "diagnostics.export"
+    "diagnostics.export",
+    "updates.check",
+    "back.handled"
   ],
   "notes": [
     "Android host should reject envelopes where version != 1.",
     "Payloads must be JSON-serializable before sending to apps/web.",
     "playback.open may include optional fields: artworkUrl, logoUrl, resumePositionMs, fallbackWebUrl, settings, tracks.",
-    "playback.result may include optional fields: fallbackTriggered, failureDomain, failureDetail, settingsDiagnostics."
+    "playback.result may include optional fields: fallbackTriggered, failureDomain, failureDetail, settingsDiagnostics.",
+    "back.pressed payload includes requestId for deterministic back acknowledgement.",
+    "back.handled command acknowledges a specific back requestId with handled boolean."
   ]
 }

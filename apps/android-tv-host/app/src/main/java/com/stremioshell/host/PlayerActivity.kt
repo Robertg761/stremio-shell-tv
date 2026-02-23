@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.widget.ImageView
 import android.widget.ImageButton
@@ -40,6 +41,7 @@ import androidx.media3.ui.TrackSelectionDialogBuilder
 import java.net.URL
 import java.util.concurrent.Executors
 import kotlin.math.abs
+import org.json.JSONArray
 
 class PlayerActivity : AppCompatActivity() {
   companion object {
@@ -64,6 +66,7 @@ class PlayerActivity : AppCompatActivity() {
   private var hasCompleted = false
   private var fallbackTriggered = false
   private var introAnimationCompleted = false
+  private var unsupportedSettingsNoticeShown = false
   private var currentResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
   private val uiHandler = Handler(Looper.getMainLooper())
   private val imageLoader = Executors.newSingleThreadExecutor()
@@ -143,6 +146,60 @@ class PlayerActivity : AppCompatActivity() {
     }
   }
 
+  override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    if (event.action != KeyEvent.ACTION_DOWN) {
+      return super.dispatchKeyEvent(event)
+    }
+
+    when (event.keyCode) {
+      KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+        togglePlaybackByRemote()
+        return true
+      }
+      KeyEvent.KEYCODE_MEDIA_PLAY -> {
+        player?.playWhenReady = true
+        playerView.showController()
+        return true
+      }
+      KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+        player?.playWhenReady = false
+        playerView.showController()
+        return true
+      }
+      KeyEvent.KEYCODE_MEDIA_REWIND -> {
+        player?.seekBack()
+        playerView.showController()
+        return true
+      }
+      KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+        player?.seekForward()
+        playerView.showController()
+        return true
+      }
+      KeyEvent.KEYCODE_DPAD_CENTER,
+      KeyEvent.KEYCODE_ENTER,
+      KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+        if (!playerView.isControllerFullyVisible()) {
+          togglePlaybackByRemote()
+          return true
+        }
+      }
+      KeyEvent.KEYCODE_MENU,
+      KeyEvent.KEYCODE_INFO -> {
+        showPlaybackOptionsDialog()
+        return true
+      }
+      KeyEvent.KEYCODE_BACK -> {
+        if (playerView.isControllerFullyVisible()) {
+          playerView.hideController()
+          return true
+        }
+      }
+    }
+
+    return super.dispatchKeyEvent(event)
+  }
+
   override fun onPause() {
     request?.settings?.pauseOnMinimize?.takeIf { it }?.let {
       player?.playWhenReady = false
@@ -180,6 +237,13 @@ class PlayerActivity : AppCompatActivity() {
     player?.release()
     player = null
     super.onDestroy()
+  }
+
+  private fun togglePlaybackByRemote() {
+    val activePlayer = player ?: return
+    activePlayer.playWhenReady = !activePlayer.playWhenReady
+    playerView.showController()
+    focusPrimaryControllerButton()
   }
 
   private fun initializePlayer(playbackRequest: NativePlaybackRequest) {
@@ -226,6 +290,7 @@ class PlayerActivity : AppCompatActivity() {
           val diagnostics = NativePlaybackContracts.settingsDiagnostics(playbackRequest.settings, appliedSettings)
           if (!hasStarted) {
             hasStarted = true
+            maybeShowUnsupportedSettingsNotice(diagnostics)
             PlaybackBridge.sendPlaybackEvent(
               this@PlayerActivity,
               HostBridgeContract.createPlaybackPayload(
@@ -565,6 +630,33 @@ class PlayerActivity : AppCompatActivity() {
     }
   }
 
+  private fun maybeShowUnsupportedSettingsNotice(settingsDiagnostics: JSONArray) {
+    if (unsupportedSettingsNoticeShown) {
+      return
+    }
+
+    val unsupported = mutableListOf<String>()
+    for (index in 0 until settingsDiagnostics.length()) {
+      val item = settingsDiagnostics.optJSONObject(index) ?: continue
+      if (!item.optBoolean("applied", false)) {
+        val name = item.optString("name").ifBlank { null } ?: continue
+        unsupported += name
+      }
+    }
+
+    if (unsupported.isEmpty()) {
+      return
+    }
+
+    unsupportedSettingsNoticeShown = true
+    Toast.makeText(
+      this,
+      "Some playback settings are not supported natively: ${unsupported.take(3).joinToString(", ")}",
+      Toast.LENGTH_LONG
+    ).show()
+    Log.w(TAG, "Unsupported native playback settings: ${unsupported.joinToString(", ")}")
+  }
+
   private fun isLikelyAudioFailure(error: PlaybackException): Boolean {
     val errorName = error.errorCodeName.lowercase()
     val message = error.message?.lowercase().orEmpty()
@@ -606,6 +698,8 @@ class PlayerActivity : AppCompatActivity() {
     playerView.setControllerAutoShow(true)
     playerView.setControllerShowTimeoutMs(4_000)
     playerView.setControllerHideOnTouch(true)
+    playerView.isFocusable = true
+    playerView.isFocusableInTouchMode = true
     playerView.setShowRewindButton(true)
     playerView.setShowFastForwardButton(true)
     playerView.setShowPreviousButton(false)
@@ -617,6 +711,7 @@ class PlayerActivity : AppCompatActivity() {
       Log.d(TAG, "controllerVisibility=$visibility")
       if (visibility == View.VISIBLE) {
         bindControllerButtons()
+        focusPrimaryControllerButton()
       }
       // Media3 controller visibility transitions can bring system bars back on some devices.
       uiHandler.post { applyImmersiveMode() }
@@ -638,6 +733,21 @@ class PlayerActivity : AppCompatActivity() {
     }
     playerView.setFullscreenButtonClickListener {
       showVideoModeDialog()
+    }
+  }
+
+  private fun focusPrimaryControllerButton() {
+    playerView.post {
+      val playPauseButton = playerView.findViewById<View>(androidx.media3.ui.R.id.exo_play_pause)
+      if (playPauseButton != null && playPauseButton.isShown && playPauseButton.isFocusable) {
+        playPauseButton.requestFocus()
+        return@post
+      }
+
+      val rewindButton = playerView.findViewById<View>(androidx.media3.ui.R.id.exo_rew)
+      if (rewindButton != null && rewindButton.isShown && rewindButton.isFocusable) {
+        rewindButton.requestFocus()
+      }
     }
   }
 

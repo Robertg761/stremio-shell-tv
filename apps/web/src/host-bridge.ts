@@ -50,6 +50,26 @@ export function createDiagnosticsExportCommand(reason: "manual" | "error" | "sup
   return createHostEnvelope("diagnostics.export", { reason });
 }
 
+export function createBackHandledCommand(
+  requestId: string,
+  handled: boolean,
+  reason?: string
+): HostCommand {
+  const payload: {
+    requestId: string;
+    handled: boolean;
+    reason?: string;
+  } = {
+    requestId,
+    handled
+  };
+  if (typeof reason === "string" && reason.length > 0) {
+    payload.reason = reason;
+  }
+
+  return createHostEnvelope("back.handled", payload);
+}
+
 type PlaybackOpenPayload = {
   streamId: string;
   url: string;

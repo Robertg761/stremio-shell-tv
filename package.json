@@ -10,6 +10,7 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test:contracts": "pnpm --filter @stremio-shell/core-bridge build && node --test \"packages/core-bridge/test/*.test.mjs\"",
+    "test:tv-smoke": "pnpm --filter @stremio-shell/web test:tv-smoke",
     "upstream:sync": "powershell -ExecutionPolicy Bypass -File scripts/sync-upstream-stremio-web.ps1",
     "android:web-build": "pnpm --filter @stremio-shell/web build",
     "android:tv:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleTvDebug\"",

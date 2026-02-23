@@ -27,6 +27,9 @@ Each milestone must pass all listed gates before the next milestone starts. A ga
   - route back
   - app exit
 - Host lifecycle/network events are visible in web event stream.
+- TV smoke checks pass:
+  - `pnpm test:tv-smoke`
+  - Android instrumentation smoke suite (`:app:connectedTvDebugAndroidTest` in CI/device lab)
 
 ## Milestone 2 gates
 

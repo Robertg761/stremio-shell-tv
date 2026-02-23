@@ -50,7 +50,7 @@ export interface NativePlaybackTracks {
 export type HostEvent =
   | HostEnvelope<"lifecycle.changed", { state: "created" | "started" | "resumed" | "paused" | "stopped" | "destroyed" }>
   | HostEnvelope<"network.changed", { connected: boolean; transport?: "wifi" | "ethernet" | "cellular" | "unknown" }>
-  | HostEnvelope<"back.pressed", { source: "hardware" | "remote" | "gesture" }>
+  | HostEnvelope<"back.pressed", { source: "hardware" | "remote" | "gesture"; requestId: string }>
   | HostEnvelope<"deepLink.received", { url: string }>
   | HostEnvelope<
       "playback.result",
@@ -88,7 +88,9 @@ export type HostCommand =
     >
   | HostEnvelope<"playback.close", { reason?: "user" | "end" | "error" }>
   | HostEnvelope<"external.openUrl", { url: string }>
-  | HostEnvelope<"diagnostics.export", { reason?: "manual" | "error" | "support" }>;
+  | HostEnvelope<"diagnostics.export", { reason?: "manual" | "error" | "support" }>
+  | HostEnvelope<"updates.check", { reason?: "manual" | "startup" | "background" }>
+  | HostEnvelope<"back.handled", { requestId: string; handled: boolean; reason?: string }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

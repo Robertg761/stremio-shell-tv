@@ -45,11 +45,13 @@ import org.json.JSONTokener
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
   companion object {
     private const val TAG = "StremioHost"
     private const val STARTUP_TIMEOUT_MS = 12000L
+    private const val BACK_ACK_TIMEOUT_MS = 120L
     private const val LOCAL_STREAMING_PORT = 11470
     private const val NATIVE_PLAYBACK_DEDUP_MS = 3000L
   }
@@ -93,12 +95,16 @@ class MainActivity : AppCompatActivity() {
   private val nativeFallbackLoopGuard = NativePlaybackLoopGuard()
   private val pendingEvents = mutableListOf<String>()
   private val diagnostics = ArrayDeque<String>()
+  private val hostEventDiagnostics = ArrayDeque<String>()
+  private val backDecisionDiagnostics = ArrayDeque<String>()
   private val updateRepository = UpdateRepository()
   private val apkUpdateManager = ApkUpdateManager()
   private var updateCheckInFlight = false
   private var promptedDownloadedVersion: String? = null
   private var activeUpdateDialog: AlertDialog? = null
   private var updateReceiverRegistered = false
+  private var pendingBackRequestId: String? = null
+  private var pendingBackTimeoutRunnable: Runnable? = null
   private val startupTimeoutRunnable = Runnable {
     if (startupCompleted) {
       return@Runnable
@@ -273,10 +279,9 @@ class MainActivity : AppCompatActivity() {
 
     webView.webChromeClient = object : WebChromeClient() {
       override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-        Log.d(
-          TAG,
-          "WebConsole ${consoleMessage.messageLevel()} ${consoleMessage.sourceId()}:${consoleMessage.lineNumber()} ${consoleMessage.message()}"
-        )
+        val message = "WebConsole ${consoleMessage.messageLevel()} ${consoleMessage.sourceId()}:${consoleMessage.lineNumber()} ${consoleMessage.message()}"
+        Log.d(TAG, message)
+        appendDiagnostic(message.take(500))
         return true
       }
     }
@@ -581,14 +586,77 @@ class MainActivity : AppCompatActivity() {
   private fun setupBackHandling() {
     onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
       override fun handleOnBackPressed() {
-        emitHostEvent("back.pressed", JSONObject().put("source", "hardware"))
-        if (webView.canGoBack()) {
-          webView.goBack()
-        } else {
-          finish()
-        }
+        requestBackDecision("hardware")
       }
     })
+  }
+
+  private fun requestBackDecision(source: String) {
+    if (pendingBackRequestId != null) {
+      appendDiagnostic("Back request ignored while previous decision is pending.")
+      return
+    }
+
+    val requestId = UUID.randomUUID().toString()
+    pendingBackRequestId = requestId
+
+    val timeoutRunnable = Runnable {
+      if (pendingBackRequestId == requestId) {
+        completeBackDecision(requestId, handled = false, reason = "timeout")
+      }
+    }
+    pendingBackTimeoutRunnable = timeoutRunnable
+    startupHandler.postDelayed(timeoutRunnable, BACK_ACK_TIMEOUT_MS)
+
+    appendDiagnostic("Back request started requestId=$requestId source=$source")
+    emitHostEvent(
+      "back.pressed",
+      JSONObject()
+        .put("source", source)
+        .put("requestId", requestId)
+    )
+  }
+
+  private fun handleBackHandled(payload: JSONObject) {
+    val requestId = payload.optString("requestId").ifBlank { null }
+    if (requestId == null) {
+      appendDiagnostic("Ignoring back.handled command because requestId is missing.")
+      return
+    }
+
+    val handled = payload.optBoolean("handled", false)
+    val reason = payload.optString("reason").ifBlank { "unspecified" }
+    completeBackDecision(requestId = requestId, handled = handled, reason = reason)
+  }
+
+  private fun completeBackDecision(requestId: String, handled: Boolean, reason: String) {
+    val pendingId = pendingBackRequestId
+    if (pendingId == null) {
+      appendDiagnostic("Ignoring back decision requestId=$requestId reason=$reason because no request is pending.")
+      return
+    }
+    if (pendingId != requestId) {
+      appendDiagnostic("Ignoring stale back decision requestId=$requestId expected=$pendingId reason=$reason")
+      return
+    }
+
+    pendingBackTimeoutRunnable?.let { startupHandler.removeCallbacks(it) }
+    pendingBackTimeoutRunnable = null
+    pendingBackRequestId = null
+
+    val decisionEntry = "Back decision requestId=$requestId handled=$handled reason=$reason"
+    appendDiagnostic(decisionEntry)
+    appendBackDecisionDiagnostic(decisionEntry)
+
+    if (handled) {
+      return
+    }
+
+    if (webView.canGoBack()) {
+      webView.goBack()
+    } else {
+      finish()
+    }
   }
 
   private fun loadShell() {
@@ -665,6 +733,7 @@ class MainActivity : AppCompatActivity() {
             "playback.close" -> PlaybackBridge.requestPlaybackClose(this)
             "external.openUrl" -> openExternalUrl(envelope.payload)
             "diagnostics.export" -> exportDiagnostics()
+            "back.handled" -> handleBackHandled(envelope.payload)
             "updates.check" -> checkForUpdates(manual = true)
             else -> {
               appendDiagnostic("Ignoring unsupported command: ${envelope.type}")
@@ -757,7 +826,14 @@ class MainActivity : AppCompatActivity() {
       appendLine("flavor=${if (BuildConfig.IS_TV) "tv" else "mobile"}")
       appendLine("timestamp=${System.currentTimeMillis()}")
       appendLine()
+      appendLine("[recent-diagnostics]")
       diagnostics.forEach { appendLine(it) }
+      appendLine()
+      appendLine("[host-events]")
+      hostEventDiagnostics.forEach { appendLine(it) }
+      appendLine()
+      appendLine("[back-decisions]")
+      backDecisionDiagnostics.forEach { appendLine(it) }
     }
 
     val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -900,11 +976,37 @@ class MainActivity : AppCompatActivity() {
     }
   }
 
+  private fun appendHostEventDiagnostic(type: String, payload: JSONObject) {
+    val summary = when (type) {
+      "back.pressed" -> "back.pressed requestId=${payload.optString("requestId")} source=${payload.optString("source")}"
+      "network.changed" -> "network.changed connected=${payload.optBoolean("connected")} transport=${payload.optString("transport", "unknown")}"
+      "lifecycle.changed" -> "lifecycle.changed state=${payload.optString("state", "unknown")}"
+      "deepLink.received" -> "deepLink.received url=${payload.optString("url").take(160)}"
+      "playback.result" -> "playback.result status=${payload.optString("status", "unknown")}"
+      else -> "$type payload=${payload.toString().take(180)}"
+    }
+
+    val formatted = "${timestamp()} $summary"
+    hostEventDiagnostics.addLast(formatted)
+    while (hostEventDiagnostics.size > 120) {
+      hostEventDiagnostics.removeFirst()
+    }
+  }
+
+  private fun appendBackDecisionDiagnostic(entry: String) {
+    val formatted = "${timestamp()} $entry"
+    backDecisionDiagnostics.addLast(formatted)
+    while (backDecisionDiagnostics.size > 120) {
+      backDecisionDiagnostics.removeFirst()
+    }
+  }
+
   private fun timestamp(): String {
     return SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
   }
 
   private fun emitHostEvent(type: String, payload: JSONObject) {
+    appendHostEventDiagnostic(type, payload)
     val envelope = HostBridgeContract.createEventEnvelope(type, payload)
     emitHostEventJson(envelope.toString())
   }

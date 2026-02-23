@@ -35,3 +35,14 @@ export const playbackResultContractSample: HostEvent = createHostEnvelope("playb
   failureDetail: "ready_without_audio_track",
   resumePositionMs: 34_000
 });
+
+export const backPressedContractSample: HostEvent = createHostEnvelope("back.pressed", {
+  source: "hardware" as const,
+  requestId: "req-123"
+});
+
+export const backHandledContractSample: HostCommand = createHostEnvelope("back.handled", {
+  requestId: "req-123",
+  handled: true,
+  reason: "modal_close"
+});

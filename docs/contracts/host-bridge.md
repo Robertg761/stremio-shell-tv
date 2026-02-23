@@ -23,6 +23,9 @@ Defines web-to-host commands and host-to-web events for native wrappers.
 - `lifecycle.changed`
 - `network.changed`
 - `back.pressed`
+  - Payload:
+    - `source: "hardware" | "remote" | "gesture"`
+    - `requestId: string`
 - `deepLink.received`
 - `playback.result`
   - Optional additive fields for diagnostics/fallback:
@@ -47,6 +50,14 @@ Defines web-to-host commands and host-to-web events for native wrappers.
 - `playback.close`
 - `external.openUrl`
 - `diagnostics.export`
+- `updates.check`
+  - Payload:
+    - `reason?: "manual" | "startup" | "background"`
+- `back.handled`
+  - Payload:
+    - `requestId: string`
+    - `handled: boolean`
+    - `reason?: string`
 
 ## Versioning rule
 
