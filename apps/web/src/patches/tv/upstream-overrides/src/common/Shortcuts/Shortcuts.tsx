@@ -52,6 +52,13 @@ const ARROW_KEY_TO_DIRECTION: Record<string, Direction> = {
     ArrowRight: 'right',
 };
 
+const KEY_TO_DIRECTION: Partial<Record<string, Direction>> = {
+    ArrowUp: 'up',
+    ArrowDown: 'down',
+    ArrowLeft: 'left',
+    ArrowRight: 'right',
+};
+
 const DEFAULT_FOCUSABLE_SELECTORS = [
     'a[href]',
     'button',
@@ -70,11 +77,6 @@ const DEFAULT_FOCUSABLE_SELECTORS = [
 const OVERLAY_SELECTORS = [
     '[role="dialog"]',
     '[aria-modal="true"]',
-    '[class*="modal-container"]',
-    '[class*="modal-dialog-container"]',
-    '[class*="popup"]',
-    '[class*="context-menu-container"]',
-    '[class*="side-drawer"]',
 ];
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -96,7 +98,7 @@ const isVisibleElement = (element: HTMLElement) => {
     }
 
     const style = window.getComputedStyle(element);
-    if (style.visibility === 'hidden' || style.display === 'none' || style.pointerEvents === 'none') {
+    if (style.visibility === 'hidden' || style.display === 'none') {
         return false;
     }
 
@@ -122,6 +124,178 @@ const focusRouteEntryPoint = () => {
         focusFirstElement(document, routeSelectors) ||
         focusFirstElement(document, DEFAULT_FOCUSABLE_SELECTORS)
     );
+};
+
+const focusElement = (element: HTMLElement) => {
+    try {
+        element.focus({ preventScroll: true });
+    } catch (_) {
+        element.focus();
+    }
+};
+
+const ensureFocusableElement = (element: HTMLElement) => {
+    const naturallyFocusable = element.matches('a[href],button,input,textarea,select,[tabindex]');
+    if (!naturallyFocusable && element.tabIndex < 0) {
+        element.setAttribute('tabindex', '0');
+    }
+    return element;
+};
+
+const collectFocusableCandidates = (root: ParentNode, selectors: string[]) => {
+    const seen = new Set<HTMLElement>();
+    const candidates: HTMLElement[] = [];
+
+    for (const selector of selectors) {
+        const matches = Array.from(root.querySelectorAll<HTMLElement>(selector));
+        for (const element of matches) {
+            if (seen.has(element) || !isVisibleElement(element)) {
+                continue;
+            }
+            seen.add(element);
+            candidates.push(ensureFocusableElement(element));
+        }
+    }
+
+    return candidates;
+};
+
+const scoreDirectionalCandidate = (current: DOMRect, candidate: DOMRect, direction: Direction) => {
+    const currentCenterX = current.left + (current.width / 2);
+    const currentCenterY = current.top + (current.height / 2);
+    const candidateCenterX = candidate.left + (candidate.width / 2);
+    const candidateCenterY = candidate.top + (candidate.height / 2);
+    const dx = candidateCenterX - currentCenterX;
+    const dy = candidateCenterY - currentCenterY;
+
+    let primaryDelta = 0;
+    let secondaryDelta = 0;
+    if (direction === 'right') {
+        if (dx <= 2) return null;
+        primaryDelta = dx;
+        secondaryDelta = Math.abs(dy);
+    } else if (direction === 'left') {
+        if (dx >= -2) return null;
+        primaryDelta = -dx;
+        secondaryDelta = Math.abs(dy);
+    } else if (direction === 'down') {
+        if (dy <= 2) return null;
+        primaryDelta = dy;
+        secondaryDelta = Math.abs(dx);
+    } else {
+        if (dy >= -2) return null;
+        primaryDelta = -dy;
+        secondaryDelta = Math.abs(dx);
+    }
+
+    const distance = Math.hypot(dx, dy);
+    return (primaryDelta * 1000) + (secondaryDelta * 10) + distance;
+};
+
+const moveFocusByDirection = (root: ParentNode, direction: Direction, selectors: string[]) => {
+    const candidates = collectFocusableCandidates(root, selectors);
+
+    console.log('[TVNav] moveFocusByDirection direction=', direction, 'candidates len=', candidates.length);
+
+    if (candidates.length === 0) {
+        return false;
+    }
+
+    const activeElement = document.activeElement;
+    const current = activeElement instanceof HTMLElement && candidates.includes(activeElement) ? activeElement : null;
+
+    console.log('[TVNav] current activeElement=', activeElement, 'current=', current);
+
+    if (!current) {
+        focusElement(candidates[0]);
+        console.log('[TVNav] no current match, focusing first candidate=', candidates[0]);
+        return true;
+    }
+
+    const currentRect = current.getBoundingClientRect();
+    const scoredCandidates = candidates
+        .filter((candidate) => candidate !== current)
+        .map((candidate) => ({
+            candidate,
+            score: scoreDirectionalCandidate(currentRect, candidate.getBoundingClientRect(), direction),
+        }))
+        .filter((entry): entry is { candidate: HTMLElement, score: number } => entry.score !== null)
+        .sort((a, b) => a.score - b.score);
+
+    console.log('[TVNav] scored candidates len=', scoredCandidates.length, 'best score=', scoredCandidates[0]?.score);
+
+    const next = scoredCandidates[0]?.candidate;
+    if (!next) {
+        return false;
+    }
+    focusElement(next);
+    return true;
+};
+
+const navigateTvDirection = (direction: Direction) => {
+    const activeOverlay = getTopOverlayElement();
+    if (activeOverlay) {
+        return moveFocusByDirection(activeOverlay, direction, DEFAULT_FOCUSABLE_SELECTORS);
+    }
+
+    if (typeof window.navigate === 'function') {
+        const before = document.activeElement;
+        window.navigate(direction);
+        if (document.activeElement !== before) {
+            return true;
+        }
+    }
+
+    const routeSelectors = getRouteFocusSelectors(window.location.hash);
+    return moveFocusByDirection(
+        document,
+        direction,
+        [...routeSelectors, ...DEFAULT_FOCUSABLE_SELECTORS]
+    );
+};
+
+const activateFocusedElement = () => {
+    const activeElement = document.activeElement;
+    if (!(activeElement instanceof HTMLElement)) {
+        return false;
+    }
+    if (activeElement === document.body || activeElement === document.documentElement) {
+        return false;
+    }
+
+    if (typeof activeElement.click === 'function') {
+        activeElement.click();
+        return true;
+    }
+    return false;
+};
+
+const handleTvKeyHostEvent = (payload: Record<string, unknown>) => {
+    const key = typeof payload.key === 'string' ? payload.key : '';
+    if (!key) {
+        return;
+    }
+    lastHostKeyProcessedAt = Date.now();
+
+    const direction = KEY_TO_DIRECTION[key];
+    if (direction) {
+        if (!isPlayerRoute()) {
+            if (!hasRealFocusedElement()) {
+                focusRouteEntryPoint();
+            }
+            const moved = navigateTvDirection(direction);
+            recordTvDiagnostic(`Host key ${key} moved=${moved}`);
+        }
+        return;
+    }
+
+    if (key === 'Enter') {
+        if (!hasRealFocusedElement()) {
+            focusRouteEntryPoint();
+        }
+        const activated = activateFocusedElement();
+        recordTvDiagnostic(`Host key Enter activated=${activated}`);
+    }
 };
 
 const hasRealFocusedElement = () => {
@@ -178,6 +352,8 @@ const recordTvDiagnostic = (message: string) => {
 };
 
 const OVERLAY_CLOSE_SETTLE_MS = 50;
+const HOST_KEY_DEDUP_MS = 150;
+let lastHostKeyProcessedAt = 0;
 
 const sendBackHandled = (requestId: string, handled: boolean, reason: string) => {
     const envelope = createBackHandledEnvelope(requestId, handled, reason);
@@ -291,7 +467,12 @@ const handleDeepLinkEvent = (payload: Record<string, unknown>) => {
 const ShortcutsProvider = ({ children, onShortcut }: Props) => {
     const platform = usePlatform();
     const listeners = useRef<Map<ShortcutName, Set<ShortcutListener>>>(new Map());
-    const isTvRuntime = platform.name === 'android' && !platform.isMobile;
+    const platformName = (platform.name || '').toLowerCase();
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const tvUaHints = ['android tv', 'google tv', 'aft', 'bravia', 'smarttv', 'tv;'];
+    const isTvUa = tvUaHints.some((hint) => userAgent.includes(hint));
+    const hasHostBridge = Boolean(window.stremioHost && typeof window.stremioHost.sendCommand === 'function');
+    const isTvRuntime = (platformName.includes('android') && !platform.isMobile) || isTvUa || hasHostBridge;
     const hasTvNavigator = typeof window.navigate === 'function';
     const shouldHandleArrowNavigation = isTvRuntime || hasTvNavigator;
 
@@ -302,12 +483,10 @@ const ShortcutsProvider = ({ children, onShortcut }: Props) => {
         if (direction && !editableTarget && shouldHandleArrowNavigation) {
             event.preventDefault();
 
-            const topOverlay = getTopOverlayElement();
-            if (topOverlay && !topOverlay.contains(document.activeElement)) {
-                if (focusFirstElement(topOverlay, DEFAULT_FOCUSABLE_SELECTORS)) {
-                    recordTvDiagnostic(`Recovered focus inside overlay via ${direction}`);
-                    return;
-                }
+            // Skip if this arrow key was already handled by the host-event path
+            // (dedup for dual-path key delivery)
+            if (Date.now() - lastHostKeyProcessedAt < HOST_KEY_DEDUP_MS) {
+                return;
             }
 
             if (!isPlayerRoute()) {
@@ -318,8 +497,9 @@ const ShortcutsProvider = ({ children, onShortcut }: Props) => {
                     }
                 }
 
-                if (typeof window.navigate === 'function') {
-                    window.navigate(direction);
+                const moved = navigateTvDirection(direction);
+                if (moved) {
+                    recordTvDiagnostic(`Navigated ${direction} on route ${window.location.hash || '#/'}`);
                 }
             }
         }
@@ -422,6 +602,9 @@ const ShortcutsProvider = ({ children, onShortcut }: Props) => {
                     break;
                 case 'network.changed':
                     recordTvDiagnostic(`Network connected=${String(payload.connected ?? 'unknown')} transport=${String(payload.transport ?? 'unknown')}`);
+                    break;
+                case 'tv.key':
+                    handleTvKeyHostEvent(payload);
                     break;
             }
         };

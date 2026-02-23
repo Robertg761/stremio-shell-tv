@@ -245,9 +245,55 @@ class MainActivity : AppCompatActivity() {
       if (BuildConfig.DEBUG && event.action == KeyEvent.ACTION_DOWN) {
         appendDiagnostic("TV key event passthrough code=${event.keyCode} webReady=$webReady")
       }
+
+      val shouldForward = event.keyCode != KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_DOWN
+      if (shouldForward) {
+        if (forwardTvKeyEventToWeb(event)) {
+          return true
+        }
+      }
     }
 
     return super.dispatchKeyEvent(event)
+  }
+
+  private fun forwardTvKeyEventToWeb(event: KeyEvent): Boolean {
+    if (!webReady) {
+      return false
+    }
+
+    val key = when (event.keyCode) {
+      KeyEvent.KEYCODE_DPAD_UP -> "ArrowUp"
+      KeyEvent.KEYCODE_DPAD_DOWN -> "ArrowDown"
+      KeyEvent.KEYCODE_DPAD_LEFT -> "ArrowLeft"
+      KeyEvent.KEYCODE_DPAD_RIGHT -> "ArrowRight"
+      KeyEvent.KEYCODE_DPAD_CENTER,
+      KeyEvent.KEYCODE_ENTER,
+      KeyEvent.KEYCODE_NUMPAD_ENTER -> "Enter"
+      KeyEvent.KEYCODE_MENU -> "ContextMenu"
+      KeyEvent.KEYCODE_INFO -> "Info"
+      KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "MediaPlayPause"
+      KeyEvent.KEYCODE_MEDIA_PLAY -> "MediaPlay"
+      KeyEvent.KEYCODE_MEDIA_PAUSE -> "MediaPause"
+      KeyEvent.KEYCODE_MEDIA_REWIND -> "MediaRewind"
+      KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "MediaFastForward"
+      else -> null
+    } ?: return false
+
+    emitHostEvent(
+      "tv.key",
+      JSONObject()
+        .put("key", key)
+        .put("keyCode", event.keyCode)
+        .put("action", "down")
+    )
+    if (BuildConfig.DEBUG && event.action == KeyEvent.ACTION_DOWN) {
+      appendDiagnostic("Forwarded TV key event to host channel key=$key keyCode=${event.keyCode}")
+    }
+    // Return false so the native key event also reaches the WebView as a DOM keydown.
+    // This provides a fallback path if the host-event listener isn't registered yet.
+    // JS-side deduplication in Shortcuts.tsx prevents double-processing.
+    return false
   }
 
   override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
