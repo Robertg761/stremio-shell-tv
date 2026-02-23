@@ -6,6 +6,7 @@ local.properties
 dist
 build
 apps/web/.upstream-build
+apps/android-tv-host/app/src/main/assets/core-runtime/
 coverage
 *.log
 .DS_Store

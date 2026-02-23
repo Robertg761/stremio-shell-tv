@@ -132,6 +132,11 @@ const focusElement = (element: HTMLElement) => {
     } catch (_) {
         element.focus();
     }
+    try {
+        element.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'nearest' });
+    } catch (_) {
+        element.scrollIntoView(false);
+    }
 };
 
 const ensureFocusableElement = (element: HTMLElement) => {
@@ -327,15 +332,26 @@ const ensureTvFocusRingStyles = () => {
     const style = document.createElement('style');
     style.id = TV_FOCUS_RING_STYLE_ID;
     style.textContent = `
+      *, *:before, *:after {
+        scroll-behavior: auto !important;
+      }
+      ::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
+      html, body {
+        scrollbar-width: none !important;
+        overflow: hidden !important;
+      }
       :focus-visible {
-        outline: 4px solid #f7b500 !important;
-        outline-offset: 2px !important;
+        outline: none !important;
       }
       [class*="button-container"]:focus-visible,
       [class*="nav-tab-button-container"]:focus-visible,
       [class*="meta-item-container"]:focus-visible,
       [class*="stream-container"]:focus-visible {
-        box-shadow: 0 0 0 4px rgba(247, 181, 0, 0.45) !important;
+        box-shadow: none !important;
       }
     `;
     document.head.appendChild(style);

@@ -17,7 +17,7 @@
       android:enabled="true"
       android:exported="true"
       android:label="@string/app_name"
-      android:targetActivity=".MainActivity">
+      android:targetActivity=".compose.ComposeMainActivity">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LEANBACK_LAUNCHER" />

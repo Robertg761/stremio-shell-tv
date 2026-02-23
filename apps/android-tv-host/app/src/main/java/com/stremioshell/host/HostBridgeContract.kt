@@ -10,6 +10,9 @@ data class HostEnvelope(
   val timestampMs: Long
 )
 
+@Deprecated(
+  message = "Legacy WebView bridge contract. Compose runtime path no longer uses this as the runtime entrypoint."
+)
 object HostBridgeContract {
   const val CONTRACT_VERSION = 1
   const val HOST_EVENT_NAME = "stremio:host-event"

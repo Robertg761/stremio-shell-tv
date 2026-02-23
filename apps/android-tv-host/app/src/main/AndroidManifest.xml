@@ -14,12 +14,7 @@
     android:theme="@style/Theme.StremioShell"
     android:usesCleartextTraffic="true">
     <activity
-      android:name=".PlayerActivity"
-      android:exported="false"
-      android:theme="@style/Theme.StremioShell.NoActionBar" />
-
-    <activity
-      android:name=".MainActivity"
+      android:name=".compose.ComposeMainActivity"
       android:exported="true"
       android:launchMode="singleTask"
       android:theme="@style/Theme.StremioShell.NoActionBar">
@@ -32,6 +27,12 @@
         <data android:scheme="stremio-shell" />
       </intent-filter>
     </activity>
+
+    <activity
+      android:name=".MainActivity"
+      android:exported="false"
+      android:launchMode="singleTask"
+      android:theme="@style/Theme.StremioShell.NoActionBar" />
 
     <provider
       android:name="androidx.core.content.FileProvider"
