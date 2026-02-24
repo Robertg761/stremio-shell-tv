@@ -80,6 +80,7 @@ const OVERLAY_SELECTORS = [
 ];
 
 const SIDEBAR_NAV_SELECTOR = '[class*="nav-tab-button-container"]';
+const SIDEBAR_NAV_LIKE_SELECTOR = '[class*="nav-tab-button"]';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
     return typeof value === 'object' && value !== null;
@@ -147,6 +148,33 @@ const ensureFocusableElement = (element: HTMLElement) => {
         element.setAttribute('tabindex', '0');
     }
     return element;
+};
+
+const getElementDebugLabel = (element: Element | null) => {
+    if (!(element instanceof HTMLElement)) {
+        return 'null';
+    }
+
+    const tag = element.tagName.toLowerCase();
+    const id = element.id ? `#${element.id}` : '';
+    const className = typeof element.className === 'string'
+        ? element.className.trim().split(/\s+/).filter(Boolean).slice(0, 3).join('.')
+        : '';
+    const classes = className ? `.${className}` : '';
+    const text = (element.getAttribute('aria-label') || element.textContent || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .slice(0, 40);
+    const rect = element.getBoundingClientRect();
+    return `${tag}${id}${classes} "${text}" @(${Math.round(rect.left)},${Math.round(rect.top)} ${Math.round(rect.width)}x${Math.round(rect.height)})`;
+};
+
+const isSidebarNavLikeElement = (element: HTMLElement) => {
+    if (element.matches(SIDEBAR_NAV_SELECTOR) || element.matches(SIDEBAR_NAV_LIKE_SELECTOR)) {
+        return true;
+    }
+
+    return Boolean(element.closest(SIDEBAR_NAV_SELECTOR) || element.closest(SIDEBAR_NAV_LIKE_SELECTOR));
 };
 
 const collectFocusableCandidates = (root: ParentNode, selectors: string[]) => {
@@ -235,9 +263,10 @@ const resolveCurrentCandidate = (
 };
 
 const getContextCandidates = (current: HTMLElement, direction: Direction, candidates: HTMLElement[]) => {
-    if ((direction === 'up' || direction === 'down') && current.matches(SIDEBAR_NAV_SELECTOR)) {
-        const sidebarCandidates = candidates.filter((candidate) => candidate.matches(SIDEBAR_NAV_SELECTOR));
+    if ((direction === 'up' || direction === 'down') && isSidebarNavLikeElement(current)) {
+        const sidebarCandidates = candidates.filter((candidate) => isSidebarNavLikeElement(candidate));
         if (sidebarCandidates.length > 1) {
+            console.log('[TVNav] context=sidebar vertical direction=', direction, 'sidebar candidates=', sidebarCandidates.length, 'current=', getElementDebugLabel(current));
             return sidebarCandidates;
         }
     }
@@ -257,7 +286,7 @@ const moveFocusByDirection = (root: ParentNode, direction: Direction, selectors:
     const activeElement = document.activeElement;
     const current = resolveCurrentCandidate(activeElement, allCandidates, selectors);
 
-    console.log('[TVNav] current activeElement=', activeElement, 'current=', current);
+    console.log('[TVNav] current activeElement=', getElementDebugLabel(activeElement), 'current=', getElementDebugLabel(current));
 
     if (!current) {
         focusElement(allCandidates[0]);
@@ -277,6 +306,12 @@ const moveFocusByDirection = (root: ParentNode, direction: Direction, selectors:
         .sort((a, b) => a.score - b.score);
 
     console.log('[TVNav] scored candidates len=', scoredCandidates.length, 'best score=', scoredCandidates[0]?.score);
+    if (scoredCandidates.length > 0) {
+        const top = scoredCandidates
+            .slice(0, 3)
+            .map((entry) => `${entry.score.toFixed(1)} => ${getElementDebugLabel(entry.candidate)}`);
+        console.log('[TVNav] top candidates', top);
+    }
 
     const next = scoredCandidates[0]?.candidate;
     if (!next) {
@@ -292,19 +327,35 @@ const navigateTvDirection = (direction: Direction) => {
         return moveFocusByDirection(activeOverlay, direction, DEFAULT_FOCUSABLE_SELECTORS);
     }
 
+    const routeSelectors = getRouteFocusSelectors(window.location.hash);
+    const allSelectors = [...routeSelectors, ...DEFAULT_FOCUSABLE_SELECTORS];
+    const focusCandidates = collectFocusableCandidates(document, allSelectors);
+    const current = resolveCurrentCandidate(document.activeElement, focusCandidates, allSelectors);
+
+    if (
+        (direction === 'up' || direction === 'down')
+        && current
+        && isSidebarNavLikeElement(current)
+    ) {
+        console.log('[TVNav] bypassing window.navigate for sidebar vertical move direction=', direction, 'current=', getElementDebugLabel(current));
+        return moveFocusByDirection(document, direction, allSelectors);
+    }
+
     if (typeof window.navigate === 'function') {
         const before = document.activeElement;
         window.navigate(direction);
-        if (document.activeElement !== before) {
+        const changedByNativeNavigate = document.activeElement !== before;
+        if (changedByNativeNavigate) {
+            console.log('[TVNav] window.navigate changed focus direction=', direction, 'before=', getElementDebugLabel(before), 'after=', getElementDebugLabel(document.activeElement));
             return true;
         }
+        console.log('[TVNav] window.navigate kept focus direction=', direction, 'active=', getElementDebugLabel(document.activeElement));
     }
 
-    const routeSelectors = getRouteFocusSelectors(window.location.hash);
     return moveFocusByDirection(
         document,
         direction,
-        [...routeSelectors, ...DEFAULT_FOCUSABLE_SELECTORS]
+        allSelectors
     );
 };
 
