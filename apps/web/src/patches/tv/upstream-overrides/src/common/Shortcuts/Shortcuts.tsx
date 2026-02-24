@@ -79,6 +79,8 @@ const OVERLAY_SELECTORS = [
     '[aria-modal="true"]',
 ];
 
+const SIDEBAR_NAV_SELECTOR = '[class*="nav-tab-button-container"]';
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
     return typeof value === 'object' && value !== null;
 };
@@ -173,50 +175,97 @@ const scoreDirectionalCandidate = (current: DOMRect, candidate: DOMRect, directi
     const dx = candidateCenterX - currentCenterX;
     const dy = candidateCenterY - currentCenterY;
 
-    let primaryDelta = 0;
-    let secondaryDelta = 0;
-    if (direction === 'right') {
-        if (dx <= 2) return null;
-        primaryDelta = dx;
-        secondaryDelta = Math.abs(dy);
-    } else if (direction === 'left') {
-        if (dx >= -2) return null;
-        primaryDelta = -dx;
-        secondaryDelta = Math.abs(dy);
-    } else if (direction === 'down') {
-        if (dy <= 2) return null;
-        primaryDelta = dy;
-        secondaryDelta = Math.abs(dx);
+    if (direction === 'right' && dx <= 0) return null;
+    if (direction === 'left' && dx >= 0) return null;
+    if (direction === 'down' && dy <= 0) return null;
+    if (direction === 'up' && dy >= 0) return null;
+
+    let primaryDist = 0;
+    let secondaryDist = 0;
+
+    if (direction === 'right' || direction === 'left') {
+        primaryDist = direction === 'right' 
+            ? Math.max(0, candidate.left - current.right) 
+            : Math.max(0, current.left - candidate.right);
+        secondaryDist = Math.max(0, Math.max(current.top, candidate.top) - Math.min(current.bottom, candidate.bottom));
     } else {
-        if (dy >= -2) return null;
-        primaryDelta = -dy;
-        secondaryDelta = Math.abs(dx);
+        primaryDist = direction === 'down'
+            ? Math.max(0, candidate.top - current.bottom)
+            : Math.max(0, current.top - candidate.bottom);
+        secondaryDist = Math.max(0, Math.max(current.left, candidate.left) - Math.min(current.right, candidate.right));
     }
 
-    const distance = Math.hypot(dx, dy);
-    return (primaryDelta * 1000) + (secondaryDelta * 10) + distance;
+    const primaryCenterDelta = direction === 'right' || direction === 'left' ? Math.abs(dx) : Math.abs(dy);
+    const secondaryCenterDelta = direction === 'right' || direction === 'left' ? Math.abs(dy) : Math.abs(dx);
+
+    if (secondaryCenterDelta > primaryCenterDelta * 3) {
+        return null;
+    }
+
+    const centerDistance = Math.hypot(dx, dy);
+    return (primaryDist * 10) + (secondaryDist * 50) + centerDistance;
+};
+
+const resolveCurrentCandidate = (
+    activeElement: Element | null,
+    candidates: HTMLElement[],
+    selectors: string[]
+) => {
+    if (!(activeElement instanceof HTMLElement)) {
+        return null;
+    }
+
+    if (candidates.includes(activeElement)) {
+        return activeElement;
+    }
+
+    for (const selector of selectors) {
+        const closest = activeElement.closest<HTMLElement>(selector);
+        if (closest && candidates.includes(closest)) {
+            return closest;
+        }
+    }
+
+    const fallbackFocusable = activeElement.closest<HTMLElement>('a[href],button,input,textarea,select,[tabindex]');
+    if (fallbackFocusable && candidates.includes(fallbackFocusable)) {
+        return fallbackFocusable;
+    }
+
+    return null;
+};
+
+const getContextCandidates = (current: HTMLElement, direction: Direction, candidates: HTMLElement[]) => {
+    if ((direction === 'up' || direction === 'down') && current.matches(SIDEBAR_NAV_SELECTOR)) {
+        const sidebarCandidates = candidates.filter((candidate) => candidate.matches(SIDEBAR_NAV_SELECTOR));
+        if (sidebarCandidates.length > 1) {
+            return sidebarCandidates;
+        }
+    }
+
+    return candidates;
 };
 
 const moveFocusByDirection = (root: ParentNode, direction: Direction, selectors: string[]) => {
-    const candidates = collectFocusableCandidates(root, selectors);
+    const allCandidates = collectFocusableCandidates(root, selectors);
 
-    console.log('[TVNav] moveFocusByDirection direction=', direction, 'candidates len=', candidates.length);
+    console.log('[TVNav] moveFocusByDirection direction=', direction, 'candidates len=', allCandidates.length);
 
-    if (candidates.length === 0) {
+    if (allCandidates.length === 0) {
         return false;
     }
 
     const activeElement = document.activeElement;
-    const current = activeElement instanceof HTMLElement && candidates.includes(activeElement) ? activeElement : null;
+    const current = resolveCurrentCandidate(activeElement, allCandidates, selectors);
 
     console.log('[TVNav] current activeElement=', activeElement, 'current=', current);
 
     if (!current) {
-        focusElement(candidates[0]);
-        console.log('[TVNav] no current match, focusing first candidate=', candidates[0]);
+        focusElement(allCandidates[0]);
+        console.log('[TVNav] no current match, focusing first candidate=', allCandidates[0]);
         return true;
     }
 
+    const candidates = getContextCandidates(current, direction, allCandidates);
     const currentRect = current.getBoundingClientRect();
     const scoredCandidates = candidates
         .filter((candidate) => candidate !== current)
