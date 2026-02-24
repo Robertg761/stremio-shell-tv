@@ -5,12 +5,18 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 
 private val StremioColorScheme = darkColorScheme(
-  primary = StremioGreen,
-  onPrimary = StremioOnSurface,
-  secondary = StremioFocus,
-  background = StremioGreenDark,
+  primary = StremioPrimaryAccent,
+  onPrimary = StremioPrimaryForeground,
+  secondary = StremioSecondaryAccent,
+  onSecondary = StremioPrimaryForeground,
+  background = StremioPrimaryBackground,
+  onBackground = StremioPrimaryForeground,
   surface = StremioSurface,
-  onSurface = StremioOnSurface
+  onSurface = StremioPrimaryForeground,
+  surfaceVariant = StremioOverlay,
+  onSurfaceVariant = StremioPrimaryForeground,
+  error = StremioDangerAccent,
+  onError = StremioPrimaryForeground
 )
 
 @Composable

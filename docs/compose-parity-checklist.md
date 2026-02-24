@@ -1,46 +1,56 @@
 # Compose TV Parity Checklist
 
-Use this checklist together with `/Users/robert/Documents/Projects/stremio-shell-tv/docs/tv-qa-matrix.md` for release signoff.
+Use this together with `/Users/robert/Documents/Projects/stremio-shell-tv/docs/tv-qa-matrix.md` and `/Users/robert/Documents/Projects/stremio-shell-tv/docs/release-ui-oracle.md`.
 
-## Routes
+## Route parity matrix
 
-- [ ] Intro
-- [ ] Board
-- [ ] Discover
-- [ ] Search
-- [ ] Meta Details
-- [ ] Streams
-- [ ] Player
-- [ ] Library
-- [ ] Addons
-- [ ] Calendar
-- [ ] Settings
-- [ ] NotFound fallback
+| Route | Visual parity | Behavior parity | Evidence |
+|---|---|---|---|
+| Intro | PENDING | PENDING | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
+| Board | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
+| Discover | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
+| Search | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
+| Meta Details | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
+| Streams | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
+| Player | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/player/ComposePlayerScreen.kt` |
+| Library | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
+| Addons | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
+| Calendar | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
+| Settings | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
+| NotFound fallback | IN PROGRESS | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScreens.kt` |
 
-## Runtime/Core
+## Runtime and core parity
 
-- [x] Runtime initializes without WebView
-- [x] Envelope dispatch works (`runtime.initialize`, `auth.*`, `library.sync`, `playback.*`)
-- [x] State query works for `session`, `library`, `player`
-- [ ] Runtime event stream is stable under soak
+| Item | Status | Evidence |
+|---|---|---|
+| Runtime initializes without WebView | PASS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/core/runtime/JsSandboxRuntimeHost.kt` |
+| Envelope dispatch works | PASS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/core/CoreRuntimeModels.kt` |
+| Session/library/player state queries | PASS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/core/repo/CoreRepositories.kt` |
+| Runtime soak stability | PENDING | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/androidTest/java/com/stremioshell/host/core/RuntimeSoakTest.kt` |
 
-## TV UX
+## TV UX parity
 
-- [ ] Focus visible and deterministic on all primary routes
-- [ ] D-pad traversal complete for all controls
-- [ ] Back policy: modal close -> route back -> app exit
-- [ ] Media keys work in player
+| Item | Status | Evidence |
+|---|---|---|
+| Icon rail + top search shell | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/StremioTvApp.kt` |
+| Focus visible + deterministic | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/StremioTvApp.kt` |
+| D-pad traversal complete | PENDING | Manual QA matrix |
+| Back policy modal -> route -> exit | PASS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/BackPolicyManager.kt` |
+| Update warning banner parity | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/main/java/com/stremioshell/host/compose/screens/RouteScaffold.kt` |
 
-## Diagnostics and Ops
+## Screenshot parity regression
 
-- [x] Diagnostics export contains runtime/lifecycle/network/back traces
-- [x] Deep links route correctly (`stremio-shell://`)
-- [x] Update checks/download/install flow matches host behavior
+| Scenario | Status | Evidence |
+|---|---|---|
+| Board home capture and compare | IN PROGRESS | `/Users/robert/Documents/Projects/stremio-shell-tv/apps/android-tv-host/app/src/androidTest/java/com/stremioshell/host/compose/UiParityScreenshotTest.kt` |
+| API 26 run | PENDING | CI/device evidence |
+| API 34 run | PENDING | CI/device evidence |
 
-## Evidence
+## Signoff evidence
 
 - Build SHA:
 - Device(s):
 - Tester:
 - Date:
+- P0/P1 parity defects:
 - Notes:

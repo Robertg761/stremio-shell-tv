@@ -2,66 +2,40 @@ package com.stremioshell.host.compose.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.stremioshell.host.compose.AppActions
+import com.stremioshell.host.core.repo.CatalogRowUiState
 
 @Composable
 fun IntroScreen(state: RouteUiState, actions: AppActions) {
-  RouteScaffold(
-    title = "Intro",
-    subtitle = "Account bootstrap and host diagnostics.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction(if (state.session.isAuthenticated) "Logout" else "Login demo", actions.onLoginToggle)
-      PrimaryAction("Updates", actions.onCheckUpdates)
-    }
-  ) {
-    Card {
-      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Authenticated: ${state.session.isAuthenticated}")
-        Text("User: ${state.session.userId ?: "none"}")
-      }
-    }
-  }
+  BoardScreen(state = state, actions = actions)
 }
 
 @Composable
 fun BoardScreen(state: RouteUiState, actions: AppActions) {
-  RouteScaffold(
-    title = "Board",
-    subtitle = "Featured rows and quick launch shortcuts.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction("Updates", actions.onCheckUpdates)
-    }
+  val rows = boardRows(state)
+
+  LazyColumn(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(24.dp)
   ) {
-    Card {
-      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Featured IDs", style = MaterialTheme.typography.titleSmall)
-        if (state.catalog.featuredIds.isEmpty()) {
-          Text("No featured items yet.")
-        } else {
-          state.catalog.featuredIds.forEach { id ->
-            PrimaryAction(label = "Open $id") { actions.onSelectMeta(id) }
-          }
-        }
+    items(rows) { row ->
+      if (row.items.isEmpty()) {
+        MetaRowPlaceholder(title = row.title)
+      } else {
+        MetaRow(
+          title = row.title,
+          items = row.items,
+          onSelect = actions.onSelectMeta
+        )
       }
     }
   }
@@ -69,24 +43,17 @@ fun BoardScreen(state: RouteUiState, actions: AppActions) {
 
 @Composable
 fun DiscoverScreen(state: RouteUiState, actions: AppActions) {
-  RouteScaffold(
-    title = "Discover",
-    subtitle = "Browse metadata and stream choices.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction("Open stream", actions.onOpenDemoPlayer)
-    }
+  val rows = discoverRows(state)
+
+  LazyColumn(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(24.dp)
   ) {
-    Card {
-      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Active meta: ${state.meta.activeMetaId ?: "none"}")
-        Text("Title: ${state.meta.title ?: "n/a"}")
-        Text("Subtitle: ${state.meta.subtitle ?: "n/a"}")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          PrimaryAction("Meta movie-001") { actions.onSelectMeta("movie-001") }
-          PrimaryAction("Meta series-042") { actions.onSelectMeta("series-042") }
-        }
+    items(rows) { row ->
+      if (row.items.isEmpty()) {
+        MetaRowPlaceholder(title = row.title)
+      } else {
+        MetaRow(title = row.title, items = row.items, onSelect = actions.onSelectMeta)
       }
     }
   }
@@ -94,37 +61,34 @@ fun DiscoverScreen(state: RouteUiState, actions: AppActions) {
 
 @Composable
 fun SearchScreen(state: RouteUiState, actions: AppActions) {
-  var query by remember(state.search.query) { mutableStateOf(state.search.query) }
+  val results = state.search.results
 
-  RouteScaffold(
-    title = "Search",
-    subtitle = "Native query path backed by runtime repository.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction("Run") { actions.onSearchQueryChanged(query) }
-    }
+  LazyColumn(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(14.dp)
   ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-      OutlinedTextField(
-        modifier = Modifier.fillMaxWidth(),
-        value = query,
-        onValueChange = {
-          query = it
-        },
-        label = { Text("Search query") }
-      )
+    item {
+      if (state.search.query.isBlank()) {
+        EmptyRouteHint("Use the top search bar to find movies, series, channels, or paste a stream link.")
+      } else {
+        Text(
+          text = "Results for \"${state.search.query}\"",
+          style = MaterialTheme.typography.displaySmall,
+          color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+          modifier = Modifier.padding(horizontal = 8.dp)
+        )
+      }
+    }
 
-      Card {
-        LazyColumn(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          if (state.search.results.isEmpty()) {
-            item { Text("No results.") }
-          } else {
-            items(state.search.results) { result ->
-              PrimaryAction(label = result) { actions.onSelectMeta(result) }
-            }
-          }
-        }
+    item {
+      if (results.isEmpty()) {
+        MetaRowPlaceholder(title = "Search Results")
+      } else {
+        MetaRow(
+          title = "Search Results",
+          items = results,
+          onSelect = actions.onSelectMeta
+        )
       }
     }
   }
@@ -132,61 +96,53 @@ fun SearchScreen(state: RouteUiState, actions: AppActions) {
 
 @Composable
 fun MetaDetailsScreen(state: RouteUiState, actions: AppActions) {
-  RouteScaffold(
-    title = "Meta Details",
-    subtitle = "Selected title metadata.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction("Open stream", actions.onOpenDemoPlayer)
-    }
+  val title = state.meta.title ?: "Title Details"
+  val subtitle = state.meta.subtitle ?: "Select a title from Board, Discover, or Search."
+  val streams = listOf("${state.meta.activeMetaId ?: "stream"}-1080p", "${state.meta.activeMetaId ?: "stream"}-720p", "${state.meta.activeMetaId ?: "stream"}-480p")
+
+  Column(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(10.dp)
   ) {
-    Card {
-      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Meta ID: ${state.meta.activeMetaId ?: "none"}")
-        Text("Title: ${state.meta.title ?: "n/a"}")
-        Text("Subtitle: ${state.meta.subtitle ?: "n/a"}")
-      }
-    }
+    Text(
+      text = title,
+      style = MaterialTheme.typography.displaySmall,
+      color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+      modifier = Modifier.padding(horizontal = 8.dp)
+    )
+    Text(
+      text = subtitle,
+      style = MaterialTheme.typography.bodyLarge,
+      color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+      modifier = Modifier.padding(horizontal = 8.dp)
+    )
+    MetaRow(title = "Available Streams", items = streams, onSelect = actions.onOpenPlayer)
   }
 }
 
 @Composable
 fun StreamsScreen(state: RouteUiState, actions: AppActions) {
-  RouteScaffold(
-    title = "Streams",
-    subtitle = "Choose stream and jump into player.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction("Play demo", actions.onOpenDemoPlayer)
-    }
-  ) {
-    Card {
-      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Current stream: ${state.playback.streamId ?: "none"}")
-        Text("Progress: ${state.playback.progressMs}ms")
-      }
-    }
-  }
+  val active = state.meta.activeMetaId ?: state.playback.streamId ?: "stream"
+  val streams = listOf("$active-4K", "$active-1080p", "$active-720p", "$active-480p")
+  MetaRow(title = "Streams", items = streams, onSelect = actions.onOpenPlayer)
 }
 
 @Composable
 fun LibraryScreen(state: RouteUiState, actions: AppActions) {
-  RouteScaffold(
-    title = "Library",
-    subtitle = "Collection sync and watch progress surface.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction("Sync", actions.onLibrarySync)
-    }
+  val items = state.library.changedItemIds
+
+  LazyColumn(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
-    Card {
-      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Items: ${state.library.itemCount}")
-        Text("Reason: ${state.library.reason ?: "n/a"}")
-        Text("Changed IDs: ${state.library.changedItemIds.joinToString().ifBlank { "none" }}")
+    item {
+      EmptyRouteHint("Library items: ${state.library.itemCount}. Last sync reason: ${state.library.reason ?: "unknown"}.")
+    }
+    item {
+      if (items.isEmpty()) {
+        MetaRowPlaceholder(title = "Continue Watching")
+      } else {
+        MetaRow(title = "Continue Watching", items = items, onSelect = actions.onSelectMeta)
       }
     }
   }
@@ -194,84 +150,115 @@ fun LibraryScreen(state: RouteUiState, actions: AppActions) {
 
 @Composable
 fun AddonsScreen(state: RouteUiState, actions: AppActions) {
-  RouteScaffold(
-    title = "Addons",
-    subtitle = "Install/remove addon stubs through runtime custom actions.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction("Install catalog.plus") { actions.onInstallAddon("catalog.plus") }
-      PrimaryAction("Remove catalog.plus") { actions.onRemoveAddon("catalog.plus") }
-    }
+  val addons = if (state.addons.installed.isEmpty()) {
+    listOf("catalog.base", "catalog.community", "channels.live")
+  } else {
+    state.addons.installed
+  }
+
+  LazyColumn(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(14.dp)
   ) {
-    Card {
-      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Installed: ${state.addons.installed.joinToString().ifBlank { "none" }}")
-      }
+    item {
+      EmptyRouteHint("Installed addons and providers.")
+    }
+    item {
+      MetaRow(title = "Installed Addons", items = addons, onSelect = actions.onRemoveAddon)
+    }
+    item {
+      MetaRow(
+        title = "Addon Catalog",
+        items = listOf("catalog.plus", "meta.tmdb", "subtitles.community"),
+        onSelect = actions.onInstallAddon
+      )
     }
   }
 }
 
 @Composable
 fun CalendarScreen(state: RouteUiState, actions: AppActions) {
-  RouteScaffold(
-    title = "Calendar",
-    subtitle = "Upcoming media hooks and date-oriented browse placeholder.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction("Refresh library", actions.onLibrarySync)
-    }
-  ) {
-    Card {
-      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Calendar data source uses library/custom runtime scopes.")
-      }
-    }
+  val upcoming = if (state.library.changedItemIds.isEmpty()) {
+    listOf("Tonight", "Tomorrow", "This Week", "Next Week")
+  } else {
+    state.library.changedItemIds.map { "$it - Next Episode" }
   }
+
+  MetaRow(title = "Upcoming", items = upcoming, onSelect = actions.onSelectMeta)
 }
 
 @Composable
 fun SettingsScreen(state: RouteUiState, actions: AppActions) {
-  RouteScaffold(
-    title = "Settings",
-    subtitle = "Native settings backed by runtime custom scope.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction("Theme: Emerald") { actions.onSettingChanged("theme", "emerald") }
-      PrimaryAction("Subs: Large") { actions.onSettingChanged("subtitlesSize", "large") }
-    }
+  val settingsItems = if (state.settings.values.isEmpty()) {
+    listOf("Playback", "Subtitles", "Streaming", "Diagnostics")
+  } else {
+    state.settings.values.entries.map { "${it.key}: ${it.value}" }
+  }
+
+  LazyColumn(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(14.dp)
   ) {
-    Card {
-      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (state.settings.values.isEmpty()) {
-          Text("No settings values yet.")
-        } else {
-          state.settings.values.forEach { (key, value) ->
-            Text("$key = $value")
-          }
+    item {
+      EmptyRouteHint("Settings and playback preferences.")
+    }
+    item {
+      MetaRow(
+        title = "Settings",
+        items = settingsItems,
+        onSelect = { value ->
+          val key = value.substringBefore(':').trim().ifEmpty { "setting" }
+          val parsed = value.substringAfter(':', "enabled").trim()
+          actions.onSettingChanged(key, parsed)
         }
-      }
+      )
     }
   }
 }
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
-fun NotFoundScreen(state: RouteUiState, actions: AppActions) {
-  RouteScaffold(
-    title = "Not Found",
-    subtitle = "Unknown route fallback.",
-    diagnostics = state.diagnostics,
-    topActions = {
-      PrimaryAction("Diagnostics", actions.onOpenDiagnostics)
-      PrimaryAction("Go Intro") { actions.onSelectMeta("home") }
-    }
-  ) {
-    Card {
-      Column(modifier = Modifier.padding(12.dp)) {
-        Text("Route not found.")
-      }
-    }
+fun NotFoundScreen(_state: RouteUiState, _actions: AppActions) {
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text(
+      text = "Route Not Found",
+      style = MaterialTheme.typography.displaySmall,
+      color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+    )
+    EmptyRouteHint("Use Home from the left navigation rail to recover.")
   }
+}
+
+private fun boardRows(state: RouteUiState): List<CatalogRowUiState> {
+  val fallbackRows = listOf(
+    CatalogRowUiState(
+      id = "popular_movie",
+      title = "Popular - Movie",
+      items = listOf("movie-001", "movie-010", "movie-099", "movie-222", "movie-777")
+    ),
+    CatalogRowUiState(
+      id = "popular_series",
+      title = "Popular - Series",
+      items = listOf("series-042", "series-111", "series-208", "series-310", "series-888")
+    )
+  )
+
+  val runtimeRows = state.catalog.rows
+  return if (runtimeRows.isEmpty()) fallbackRows else runtimeRows
+}
+
+private fun discoverRows(state: RouteUiState): List<CatalogRowUiState> {
+  val featured = state.catalog.featuredIds
+  return listOf(
+    CatalogRowUiState(
+      id = "discover_movies",
+      title = "Recommended - Movies",
+      items = if (featured.isEmpty()) listOf("movie-001", "movie-010", "movie-020") else featured
+    ),
+    CatalogRowUiState(
+      id = "discover_series",
+      title = "Recommended - Series",
+      items = if (featured.isEmpty()) listOf("series-042", "series-210", "series-402") else featured.reversed()
+    )
+  )
 }

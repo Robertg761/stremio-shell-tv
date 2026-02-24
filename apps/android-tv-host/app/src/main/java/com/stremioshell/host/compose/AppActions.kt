@@ -3,9 +3,8 @@ package com.stremioshell.host.compose
 data class AppActions(
   val onOpenDiagnostics: () -> Unit,
   val onCheckUpdates: () -> Unit,
-  val onLoginToggle: () -> Unit,
   val onLibrarySync: () -> Unit,
-  val onOpenDemoPlayer: () -> Unit,
+  val onOpenPlayer: (String) -> Unit,
   val onSearchQueryChanged: (String) -> Unit,
   val onSelectMeta: (String) -> Unit,
   val onInstallAddon: (String) -> Unit,

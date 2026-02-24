@@ -5,6 +5,7 @@ import com.stremioshell.host.core.CoreRuntimeClient
 import com.stremioshell.host.core.CoreStateQuery
 import com.stremioshell.host.core.LibraryChangedEvent
 import com.stremioshell.host.core.PlaybackProgressEvent
+import com.stremioshell.host.core.RuntimeRawEvent
 import com.stremioshell.host.core.TelemetryCoreEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,8 +56,15 @@ class SessionRepository(
   }
 }
 
+data class CatalogRowUiState(
+  val id: String,
+  val title: String,
+  val items: List<String>
+)
+
 data class CatalogUiState(
-  val featuredIds: List<String> = emptyList()
+  val featuredIds: List<String> = emptyList(),
+  val rows: List<CatalogRowUiState> = emptyList()
 )
 
 class CatalogRepository(
@@ -66,12 +74,43 @@ class CatalogRepository(
   private val state = MutableStateFlow(CatalogUiState())
   val uiState: StateFlow<CatalogUiState> = state.asStateFlow()
 
+  init {
+    runtime.events.onEach { event ->
+      val stateField = event.newStateFieldOrNull()
+      if (stateField == "board" || stateField == "discover") {
+        refresh()
+      }
+    }.launchIn(scope)
+  }
+
   override fun refresh() {
     scope.launch {
       val snapshot = runtime.getState(CoreStateQuery(scope = "custom", key = "catalog"))
       val data = snapshot.data as? JSONObject
       val ids = data?.optJSONArray("featuredIds").toStringList()
-      state.value = CatalogUiState(featuredIds = ids)
+      val rows = data?.optJSONArray("rows").toCatalogRows()
+      val fallbackRows = buildList {
+        if (ids.isNotEmpty()) {
+          add(
+            CatalogRowUiState(
+              id = "popular_movie",
+              title = "Popular - Movie",
+              items = ids
+            )
+          )
+          add(
+            CatalogRowUiState(
+              id = "popular_series",
+              title = "Popular - Series",
+              items = ids.reversed()
+            )
+          )
+        }
+      }
+      state.value = CatalogUiState(
+        featuredIds = ids,
+        rows = if (rows.isNullOrEmpty()) fallbackRows else rows
+      )
     }
   }
 }
@@ -88,6 +127,15 @@ class MetaRepository(
 ) : RefreshableRepository {
   private val state = MutableStateFlow(MetaUiState())
   val uiState: StateFlow<MetaUiState> = state.asStateFlow()
+
+  init {
+    runtime.events.onEach { event ->
+      val stateField = event.newStateFieldOrNull()
+      if (stateField == "meta_details") {
+        refresh()
+      }
+    }.launchIn(scope)
+  }
 
   override fun refresh() {
     scope.launch {
@@ -113,6 +161,15 @@ class SearchRepository(
 ) : RefreshableRepository {
   private val state = MutableStateFlow(SearchUiState())
   val uiState: StateFlow<SearchUiState> = state.asStateFlow()
+
+  init {
+    runtime.events.onEach { event ->
+      val stateField = event.newStateFieldOrNull()
+      if (stateField == "search") {
+        refresh()
+      }
+    }.launchIn(scope)
+  }
 
   override fun refresh() {
     scope.launch {
@@ -296,4 +353,33 @@ private fun JSONObject?.toStringMap(): Map<String, String> {
     map[key] = optString(key)
   }
   return map
+}
+
+private fun JSONArray?.toCatalogRows(): List<CatalogRowUiState> {
+  if (this == null) {
+    return emptyList()
+  }
+
+  val rows = mutableListOf<CatalogRowUiState>()
+  for (index in 0 until length()) {
+    val row = optJSONObject(index) ?: continue
+    val id = row.optString("id").ifBlank { "row_$index" }
+    val title = row.optString("title").ifBlank { "Section ${index + 1}" }
+    val items = row.optJSONArray("items").toStringList()
+    rows += CatalogRowUiState(
+      id = id,
+      title = title,
+      items = items
+    )
+  }
+  return rows
+}
+
+private fun com.stremioshell.host.core.CoreEvent.newStateFieldOrNull(): String? {
+  val raw = (this as? RuntimeRawEvent)?.rawEvent as? JSONObject ?: return null
+  if (raw.optString("name") != "NewState") {
+    return null
+  }
+  val args = raw.optJSONArray("args") ?: return null
+  return args.optString(0).ifBlank { null }
 }

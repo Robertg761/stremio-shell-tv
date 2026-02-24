@@ -4,9 +4,11 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.net.Uri
 import android.os.Bundle
+import android.util.Log
+import android.util.Base64
 import android.widget.Toast
+import androidx.annotation.VisibleForTesting
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.javascriptengine.JavaScriptSandbox
@@ -14,9 +16,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.stremioshell.host.NetworkMonitor
 import com.stremioshell.host.compose.navigation.AppScreen
+import com.stremioshell.host.compose.navigation.DeepLinkDestination
+import com.stremioshell.host.compose.navigation.DeepLinkRouter
 import com.stremioshell.host.compose.screens.RouteUiState
-import com.stremioshell.host.core.AuthLoginAction
-import com.stremioshell.host.core.AuthLogoutAction
 import com.stremioshell.host.core.CoreRuntimeClient
 import com.stremioshell.host.core.CoreStateQuery
 import com.stremioshell.host.core.CustomAction
@@ -28,12 +30,19 @@ import com.stremioshell.host.core.mapper.toDiagnosticsLine
 import com.stremioshell.host.core.runtime.JsSandboxRuntimeHost
 import com.stremioshell.host.core.runtime.NoopRuntimeHost
 import com.stremioshell.host.update.UpdateWorkScheduler
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 class ComposeMainActivity : ComponentActivity() {
+  companion object {
+    private const val TAG = "ComposeMainActivity"
+  }
+
   private lateinit var runtimeClient: CoreRuntimeClient
   private lateinit var networkMonitor: NetworkMonitor
   private lateinit var appContainer: AppContainer
@@ -41,6 +50,7 @@ class ComposeMainActivity : ComponentActivity() {
   private lateinit var updateController: ComposeUpdateController
 
   private val pendingDeepLink = MutableStateFlow<DeepLinkDestination?>(null)
+  private var lastResolvedDeepLinkRoute: String? = null
 
   private val audioFocusRequest by lazy {
     AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
@@ -84,13 +94,29 @@ class ComposeMainActivity : ComponentActivity() {
         appContainer.repositories.refreshAll()
         updateController.checkForUpdates(manual = false)
       }.onFailure {
+        Log.e(TAG, "initializeRuntime failed", it)
         appContainer.diagnosticsStore.record("runtime", "initialize failure=${it.message}")
       }
     }
 
     lifecycleScope.launch {
       runtimeClient.events.collectLatest { event ->
-        appContainer.diagnosticsStore.recordRuntimeEvent(event.toDiagnosticsLine())
+        val diagnosticsLine = event.toDiagnosticsLine()
+        Log.d(TAG, "runtimeEvent=$diagnosticsLine")
+        appContainer.diagnosticsStore.recordRuntimeEvent(diagnosticsLine)
+      }
+    }
+
+    // Keeps Compose state in sync while core models resolve asynchronously.
+    lifecycleScope.launch {
+      while (currentCoroutineContext().isActive) {
+        delay(2500)
+        runCatching {
+          appContainer.repositories.catalog.refresh()
+          appContainer.repositories.search.refresh()
+          appContainer.repositories.meta.refresh()
+          appContainer.repositories.library.refresh()
+        }
       }
     }
 
@@ -133,33 +159,19 @@ class ComposeMainActivity : ComponentActivity() {
         actions = AppActions(
           onOpenDiagnostics = {},
           onCheckUpdates = { updateController.checkForUpdates(manual = true) },
-          onLoginToggle = {
-            lifecycleScope.launch {
-              if (sessionState.isAuthenticated) {
-                runtimeClient.dispatch(AuthLogoutAction())
-              } else {
-                runtimeClient.dispatch(
-                  AuthLoginAction(
-                    method = "token",
-                    token = "compose-demo-user"
-                  )
-                )
-              }
-              appContainer.repositories.session.refresh()
-            }
-          },
           onLibrarySync = {
             lifecycleScope.launch {
               runtimeClient.dispatch(LibrarySyncAction(force = true))
               appContainer.repositories.library.refresh()
             }
           },
-          onOpenDemoPlayer = {
+          onOpenPlayer = { streamId ->
             lifecycleScope.launch {
+              val resolvedStreamId = streamId.trim().ifBlank { "stream" }
               runtimeClient.dispatch(
                 PlaybackSelectStreamAction(
-                  streamId = "demo-stream",
-                  streamBase64 = "ZGVtby1zdHJlYW0="
+                  streamId = resolvedStreamId,
+                  streamBase64 = encodeStreamBase64(resolvedStreamId)
                 )
               )
               appState.navController.navigate(AppScreen.Player.route)
@@ -187,7 +199,7 @@ class ComposeMainActivity : ComponentActivity() {
               )
               appContainer.repositories.meta.refresh()
               if (id == "home") {
-                appState.navigate(AppScreen.Intro)
+                appState.navigate(AppScreen.Board)
               } else {
                 appState.navigate(AppScreen.MetaDetails)
               }
@@ -330,7 +342,8 @@ class ComposeMainActivity : ComponentActivity() {
 
   private fun handleDeepLink(intent: Intent?) {
     val deepLink = intent?.data ?: return
-    val destination = deepLinkToDestination(deepLink)
+    val destination = DeepLinkRouter.parse(deepLink.toString())
+    lastResolvedDeepLinkRoute = destination.route
 
     appContainer.diagnosticsStore.recordHostEvent("deeplink uri=$deepLink route=${destination.route}")
     dispatchHostSignal(
@@ -365,49 +378,6 @@ class ComposeMainActivity : ComponentActivity() {
     pendingDeepLink.value = destination
   }
 
-  private fun deepLinkToDestination(uri: Uri): DeepLinkDestination {
-    val host = uri.host?.trim()?.lowercase().orEmpty()
-    val segments = uri.pathSegments
-    val routeKey: String
-    val detailSegment: String?
-
-    if (host.isNotBlank()) {
-      routeKey = host
-      detailSegment = segments.firstOrNull()
-    } else {
-      routeKey = segments.firstOrNull()?.trim()?.lowercase().orEmpty()
-      detailSegment = segments.getOrNull(1)
-    }
-
-    return when {
-      routeKey.isBlank() || routeKey == "board" || routeKey == "home" -> DeepLinkDestination(AppScreen.Board.route)
-      routeKey == "discover" -> DeepLinkDestination(AppScreen.Discover.route)
-      routeKey == "search" -> {
-        val query = uri.getQueryParameter("q") ?: uri.getQueryParameter("query")
-        DeepLinkDestination(AppScreen.Search.route, searchQuery = query?.trim().orEmpty().ifBlank { null })
-      }
-      routeKey == "library" -> DeepLinkDestination(AppScreen.Library.route)
-      routeKey == "addons" -> DeepLinkDestination(AppScreen.Addons.route)
-      routeKey == "calendar" -> DeepLinkDestination(AppScreen.Calendar.route)
-      routeKey == "settings" -> DeepLinkDestination(AppScreen.Settings.route)
-      routeKey == "streams" -> DeepLinkDestination(AppScreen.Streams.route)
-      routeKey == "meta" || routeKey == "details" -> {
-        val metaId = uri.getQueryParameter("id")?.trim().orEmpty().ifBlank { detailSegment?.trim()?.ifBlank { null } }
-        DeepLinkDestination(AppScreen.MetaDetails.route, metaId = metaId)
-      }
-      routeKey == "player" -> {
-        val url = uri.getQueryParameter("url")
-        val route = if (url.isNullOrBlank()) {
-          AppScreen.Player.route
-        } else {
-          "${AppScreen.Player.route}?url=${Uri.encode(url)}"
-        }
-        DeepLinkDestination(route)
-      }
-      else -> DeepLinkDestination(AppScreen.NotFound.route)
-    }
-  }
-
   private fun dispatchHostSignal(signalType: String, payload: JSONObject) {
     lifecycleScope.launch {
       runCatching {
@@ -436,10 +406,11 @@ class ComposeMainActivity : ComponentActivity() {
       Toast.makeText(this, "Unable to export diagnostics.", Toast.LENGTH_SHORT).show()
     }
   }
-}
 
-private data class DeepLinkDestination(
-  val route: String,
-  val searchQuery: String? = null,
-  val metaId: String? = null
-)
+  @VisibleForTesting
+  fun getLastResolvedDeepLinkRoute(): String? = lastResolvedDeepLinkRoute
+
+  private fun encodeStreamBase64(streamId: String): String {
+    return Base64.encodeToString(streamId.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+  }
+}

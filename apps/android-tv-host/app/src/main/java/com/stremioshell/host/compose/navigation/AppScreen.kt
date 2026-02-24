@@ -21,7 +21,6 @@ sealed class AppScreen(
     val topLevel = listOf(
       Board,
       Discover,
-      Search,
       Library,
       Addons,
       Calendar,
