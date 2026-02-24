@@ -64,11 +64,11 @@ const DEFAULT_FOCUSABLE_SELECTORS = [
     'button',
     '[role="button"]',
     '[tabindex]:not([tabindex="-1"])',
-    '.button-container',
-    '.nav-tab-button-container',
-    '.meta-item-container',
-    '.stream-container',
-    '.control-bar-button',
+    '[class*="button-container"]',
+    '[class*="nav-tab-button-container"]',
+    '[class*="meta-item-container"]',
+    '[class*="stream-container"]',
+    '[class*="control-bar-button"]',
     'input',
     'textarea',
     'select',
@@ -154,7 +154,7 @@ const collectFocusableCandidates = (root: ParentNode, selectors: string[]) => {
     for (const selector of selectors) {
         const matches = Array.from(root.querySelectorAll<HTMLElement>(selector));
         for (const element of matches) {
-            if (seen.has(element) || !isVisibleElement(element)) {
+            if (seen.has(element) || !isVisibleElement(element) || element.matches('[class*="see-all-container"]')) {
                 continue;
             }
             seen.add(element);
@@ -352,6 +352,18 @@ const ensureTvFocusRingStyles = () => {
       [class*="meta-item-container"]:focus-visible,
       [class*="stream-container"]:focus-visible {
         box-shadow: none !important;
+      }
+      [class*="nav-tab-button-container"]:focus-visible {
+        background-color: var(--overlay-color) !important;
+      }
+      [class*="nav-tab-button-container"]:focus-visible [class*="label"] {
+        opacity: 0.6 !important;
+      }
+      [class*="nav-tab-button-container"][class*="selected"]:focus-visible [class*="label"] {
+        opacity: 1 !important;
+      }
+      [class*="button-container"]:focus-visible {
+        background-color: var(--overlay-color);
       }
     `;
     document.head.appendChild(style);

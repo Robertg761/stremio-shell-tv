@@ -2,43 +2,43 @@ const HOST_COMMAND_VERSION = 1;
 
 const ROUTE_FOCUS_SELECTORS = {
     board: [
-        '.nav-tab-button-container.selected',
-        '.nav-tab-button-container',
-        '.meta-item-container',
-        '.button-container'
+        '[class*="nav-tab-button-container"][class*="selected"]',
+        '[class*="nav-tab-button-container"]',
+        '[class*="meta-item-container"]',
+        '[class*="button-container"]'
     ],
     discover: [
-        '.search-bar-container .button-container',
-        '.meta-item-container',
-        '.button-container'
+        '[class*="search-bar-container"] [class*="button-container"]',
+        '[class*="meta-item-container"]',
+        '[class*="button-container"]'
     ],
     metaDetails: [
-        '.stream-container',
-        '.button-container',
-        '.meta-item-container'
+        '[class*="stream-container"]',
+        '[class*="button-container"]',
+        '[class*="meta-item-container"]'
     ],
     settings: [
-        '.menu-option-container.selected',
-        '.menu-option-container',
-        '.section-container .button-container',
-        '.option-container .button-container'
+        '[class*="menu-option-container"][class*="selected"]',
+        '[class*="menu-option-container"]',
+        '[class*="section-container"] [class*="button-container"]',
+        '[class*="option-container"] [class*="button-container"]'
     ],
     player: [
-        '.control-bar-button',
-        '.side-drawer-button',
-        '.next-video-popup-container .button-container',
-        '.button-container'
+        '[class*="control-bar-button"]',
+        '[class*="side-drawer-button"]',
+        '[class*="next-video-popup-container"] [class*="button-container"]',
+        '[class*="button-container"]'
     ],
     search: [
-        '.search-bar-container input',
-        '.search-bar-container .button-container',
-        '.meta-item-container'
+        '[class*="search-bar-container"] input',
+        '[class*="search-bar-container"] [class*="button-container"]',
+        '[class*="meta-item-container"]'
     ],
     default: [
-        '.nav-tab-button-container.selected',
-        '.nav-tab-button-container',
-        '.button-container',
-        '.meta-item-container',
+        '[class*="nav-tab-button-container"][class*="selected"]',
+        '[class*="nav-tab-button-container"]',
+        '[class*="button-container"]',
+        '[class*="meta-item-container"]',
         'input',
         'textarea',
         'select'
