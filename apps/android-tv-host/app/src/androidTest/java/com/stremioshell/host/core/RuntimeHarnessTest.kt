@@ -119,4 +119,67 @@ class RuntimeHarnessTest {
 
     runtime.close()
   }
+
+  @Test
+  fun playbackActionsKeepPlayerSnapshotValid() = runBlocking {
+    assumeTrue(JavaScriptSandbox.isSupported())
+
+    val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    val runtime = JsSandboxRuntimeHost(context)
+    runtime.initializeRuntime(RuntimeInitializeAction(source = "android-test"))
+
+    runtime.dispatch(
+      PlaybackSelectStreamAction(
+        streamId = "stream-player",
+        streamBase64 = "c3RyZWFtLXBsYXllcg=="
+      )
+    )
+    runtime.dispatch(
+      PlaybackReportProgressAction(
+        streamId = "stream-player",
+        progressMs = 12_345L,
+        durationMs = 65_000L
+      )
+    )
+
+    val player = runtime.getState(CoreStateQuery(scope = "player"))
+    val playerData = player.data as? JSONObject
+
+    assertEquals("player", player.scope)
+    assertEquals("stream-player", playerData?.optString("streamId"))
+    assertEquals(12_345L, playerData?.optLong("progressMs"))
+
+    runtime.close()
+  }
+
+  @Test
+  fun invalidStreamDecodeDoesNotCrashRuntime() = runBlocking {
+    assumeTrue(JavaScriptSandbox.isSupported())
+
+    val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    val runtime = JsSandboxRuntimeHost(context)
+    runtime.initializeRuntime(RuntimeInitializeAction(source = "android-test"))
+
+    runtime.dispatch(
+      PlaybackSelectStreamAction(
+        streamId = "stream-invalid",
+        streamBase64 = "%%%invalid-base64%%%"
+      )
+    )
+    runtime.dispatch(
+      PlaybackReportProgressAction(
+        streamId = "stream-invalid",
+        progressMs = 1_000L
+      )
+    )
+
+    val player = runtime.getState(CoreStateQuery(scope = "player"))
+    val playerData = player.data as? JSONObject
+
+    assertEquals("player", player.scope)
+    assertEquals("stream-invalid", playerData?.optString("streamId"))
+    assertEquals(1_000L, playerData?.optLong("progressMs"))
+
+    runtime.close()
+  }
 }

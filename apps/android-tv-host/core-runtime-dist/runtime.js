@@ -113,14 +113,23 @@
     }
   };
 
-  const coreDispatch = function (action, locationHash) {
+  const coreDispatch = function (action, fieldOrLocationHash, maybeLocationHash) {
+    let field = null;
+    let locationHash = "";
+    if (typeof maybeLocationHash === "undefined" && (typeof fieldOrLocationHash === "string" || fieldOrLocationHash == null)) {
+      locationHash = typeof fieldOrLocationHash === "string" ? fieldOrLocationHash : "";
+    } else {
+      field = fieldOrLocationHash == null ? null : fieldOrLocationHash;
+      locationHash = typeof maybeLocationHash === "string" ? maybeLocationHash : "";
+    }
+
     if (typeof globalThis.dispatch !== "function") {
       runtime.dispatchFailureCount += 1;
       runtime.lastDispatchError = "dispatch function missing";
       return false;
     }
     try {
-      globalThis.dispatch(action, null, locationHash || "");
+      globalThis.dispatch(action, field, locationHash || "");
       runtime.dispatchSuccessCount += 1;
       runtime.lastDispatchError = null;
       return true;
@@ -634,6 +643,72 @@
       runtime.player.streamId = typeof actionPayload.streamId === "string" ? actionPayload.streamId : null;
       runtime.player.progressMs = 0;
       runtime.player.durationMs = null;
+
+      const streamBase64 = typeof actionPayload.streamBase64 === "string"
+        ? actionPayload.streamBase64
+        : "";
+      let decodedStream = null;
+      let decodeFailed = false;
+
+      if (streamBase64 !== "") {
+        try {
+          decodedStream = typeof globalThis.decodeStream === "function"
+            ? globalThis.decodeStream(streamBase64)
+            : streamBase64;
+        } catch (error) {
+          decodeFailed = true;
+          pushEvent("runtime.error", {
+            code: "playback_select_stream_decode_failed",
+            message: String(error),
+            recoverable: true,
+            details: {
+              streamId: runtime.player.streamId || "unknown",
+            },
+          });
+        }
+      }
+
+      if (!decodeFailed) {
+        const hasObjectLikeDecodedStream = !!decodedStream
+          && typeof decodedStream === "object"
+          && !Array.isArray(decodedStream);
+
+        if (hasObjectLikeDecodedStream) {
+          const dispatched = coreDispatch(
+            {
+              action: "Load",
+              args: {
+                model: "Player",
+                args: {
+                  stream: decodedStream,
+                },
+              },
+            },
+            "player",
+            ""
+          );
+          if (!dispatched) {
+            pushEvent("runtime.error", {
+              code: "playback_select_stream_dispatch_failed",
+              message: runtime.lastDispatchError || "Failed to dispatch player load action.",
+              recoverable: true,
+              details: {
+                streamId: runtime.player.streamId || "unknown",
+              },
+            });
+          }
+        } else {
+          pushEvent("runtime.error", {
+            code: "playback_select_stream_invalid_stream",
+            message: "Decoded stream payload was not object-like.",
+            recoverable: true,
+            details: {
+              streamId: runtime.player.streamId || "unknown",
+            },
+          });
+        }
+      }
+
       pushEvent("playback.progress", {
         streamId: runtime.player.streamId || "unknown",
         progressMs: 0,
@@ -642,9 +717,40 @@
       if (typeof actionPayload.streamId === "string" && actionPayload.streamId.trim() !== "") {
         runtime.player.streamId = actionPayload.streamId;
       }
-      runtime.player.progressMs = Number(actionPayload.progressMs || 0);
-      if (typeof actionPayload.durationMs === "number") {
+      const nextProgressMs = Number(actionPayload.progressMs || 0);
+      runtime.player.progressMs = Number.isFinite(nextProgressMs) ? nextProgressMs : 0;
+      if (typeof actionPayload.durationMs === "number" && Number.isFinite(actionPayload.durationMs)) {
         runtime.player.durationMs = actionPayload.durationMs;
+      }
+
+      const playerTimeChangedArgs = {
+        time: runtime.player.progressMs,
+        device: "android-host",
+      };
+      if (typeof runtime.player.durationMs === "number" && Number.isFinite(runtime.player.durationMs)) {
+        playerTimeChangedArgs.duration = runtime.player.durationMs;
+      }
+      const dispatched = coreDispatch(
+        {
+          action: "Player",
+          args: {
+            action: "TimeChanged",
+            args: playerTimeChangedArgs,
+          },
+        },
+        "player",
+        ""
+      );
+      if (!dispatched) {
+        pushEvent("runtime.error", {
+          code: "playback_report_progress_dispatch_failed",
+          message: runtime.lastDispatchError || "Failed to dispatch player progress action.",
+          recoverable: true,
+          details: {
+            streamId: runtime.player.streamId || "unknown",
+            progressMs: runtime.player.progressMs,
+          },
+        });
       }
       pushEvent("playback.progress", {
         streamId: runtime.player.streamId || "unknown",

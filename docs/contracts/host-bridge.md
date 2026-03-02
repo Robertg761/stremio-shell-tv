@@ -33,6 +33,12 @@ Defines web-to-host commands and host-to-web events for native wrappers.
     - `failureDomain: "native_audio" | "network" | "decode" | "unsupported" | "host" | "unknown"`
     - `failureDetail: string`
     - `settingsDiagnostics: Array<object>`
+  - Host behavior notes:
+    - When native playback launch is skipped by host loop guard, host emits `status: "failed"` with:
+      - `fallbackTriggered: true`
+      - `failureDomain: "host"`
+      - `failureDetail: "loop_guard_skip"`
+      - passthrough `streamId` / `url` / `fallbackWebUrl` when available
 
 ## Host commands
 

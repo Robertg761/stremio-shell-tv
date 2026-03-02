@@ -17,6 +17,19 @@ describe('tvHostEvents', () => {
         expect(typeof envelope.timestampMs).toBe('number');
     });
 
+    test('createBackHandledEnvelope requires requestId', () => {
+        expect(createBackHandledEnvelope('', true, 'overlay_close')).toBeNull();
+        expect(createBackHandledEnvelope('   ', false, 'unhandled')).toBeNull();
+    });
+
+    test('createBackHandledEnvelope trims requestId and reason', () => {
+        const envelope = createBackHandledEnvelope('  req-2  ', false, '  overlay_still_open  ');
+
+        expect(envelope.payload.requestId).toBe('req-2');
+        expect(envelope.payload.handled).toBe(false);
+        expect(envelope.payload.reason).toBe('overlay_still_open');
+    });
+
     test('normalizeDeepLinkToHash maps stremio-shell urls to router hashes', () => {
         expect(normalizeDeepLinkToHash('stremio-shell://board')).toBe('#/board');
         expect(normalizeDeepLinkToHash('stremio-shell://player/abc?x=1')).toBe('#/player/abc?x=1');

@@ -45,6 +45,7 @@ import org.json.JSONTokener
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
   companion object {
@@ -52,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private const val STARTUP_TIMEOUT_MS = 12000L
     private const val LOCAL_STREAMING_PORT = 11470
     private const val NATIVE_PLAYBACK_DEDUP_MS = 3000L
+    private const val BACK_ACK_TIMEOUT_MS = 250L
   }
 
   private lateinit var webView: WebView
@@ -91,6 +93,8 @@ class MainActivity : AppCompatActivity() {
   private var lastNativePlaybackAtMs: Long = 0L
   private var lastStructuredPlaybackAtMs: Long = 0L
   private val nativeFallbackLoopGuard = NativePlaybackLoopGuard()
+  private val backHandshakeController = BackHandshakeController(timeoutMs = BACK_ACK_TIMEOUT_MS)
+  private val backAckTimeoutRunnables = mutableMapOf<String, Runnable>()
   private val pendingEvents = mutableListOf<String>()
   private val diagnostics = ArrayDeque<String>()
   private val updateRepository = UpdateRepository()
@@ -221,6 +225,8 @@ class MainActivity : AppCompatActivity() {
 
   override fun onDestroy() {
     startupHandler.removeCallbacksAndMessages(null)
+    backAckTimeoutRunnables.clear()
+    backHandshakeController.clear()
     abandonAudioFocus()
     emitLifecycle("destroyed")
     activeUpdateDialog?.dismiss()
@@ -581,14 +587,93 @@ class MainActivity : AppCompatActivity() {
   private fun setupBackHandling() {
     onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
       override fun handleOnBackPressed() {
-        emitHostEvent("back.pressed", JSONObject().put("source", "hardware"))
-        if (webView.canGoBack()) {
-          webView.goBack()
-        } else {
-          finish()
-        }
+        requestBackHandling(source = "hardware")
       }
     })
+  }
+
+  private fun requestBackHandling(source: String) {
+    val existing = backHandshakeController.pendingRequestId()
+    if (existing != null) {
+      appendDiagnostic("Back request ignored because pending request still active id=$existing")
+      return
+    }
+
+    val requestId = UUID.randomUUID().toString()
+    val pending = backHandshakeController.begin(requestId)
+    if (pending == null) {
+      appendDiagnostic("Back request setup failed id=$requestId; applying native fallback.")
+      applyNativeBackFallback(reason = "handshake_begin_failed", requestId = requestId)
+      return
+    }
+
+    appendDiagnostic("Back request dispatched id=${pending.requestId} source=$source timeoutMs=$BACK_ACK_TIMEOUT_MS")
+    emitHostEvent(
+      "back.pressed",
+      JSONObject()
+        .put("source", source)
+        .put("requestId", pending.requestId)
+    )
+    scheduleBackAckTimeout(pending.requestId)
+  }
+
+  private fun scheduleBackAckTimeout(requestId: String) {
+    val runnable = Runnable {
+      backAckTimeoutRunnables.remove(requestId)
+      when (val resolution = backHandshakeController.onTimeout(requestId)) {
+        is BackHandshakeResolution.RunNativeFallback -> {
+          appendDiagnostic("Back ack timeout id=${resolution.requestId} reason=${resolution.reason}")
+          applyNativeBackFallback(reason = resolution.reason, requestId = resolution.requestId)
+        }
+        is BackHandshakeResolution.Ignored -> {
+          appendDiagnostic("Back ack timeout ignored id=$requestId reason=${resolution.reason}")
+        }
+        is BackHandshakeResolution.Handled -> {
+          appendDiagnostic("Back ack timeout resolved as handled id=${resolution.requestId}")
+        }
+      }
+    }
+    backAckTimeoutRunnables[requestId] = runnable
+    startupHandler.postDelayed(runnable, BACK_ACK_TIMEOUT_MS)
+  }
+
+  private fun cancelBackAckTimeout(requestId: String) {
+    val runnable = backAckTimeoutRunnables.remove(requestId) ?: return
+    startupHandler.removeCallbacks(runnable)
+  }
+
+  private fun handleBackHandledCommand(payload: JSONObject) {
+    val requestId = payload.optString("requestId").trim()
+    if (requestId.isEmpty()) {
+      appendDiagnostic("Ignoring back.handled without requestId.")
+      return
+    }
+
+    val handled = payload.optBoolean("handled", false)
+    val reason = payload.optString("reason").ifBlank { null }
+    cancelBackAckTimeout(requestId)
+
+    when (val resolution = backHandshakeController.acknowledge(requestId, handled, reason)) {
+      is BackHandshakeResolution.Handled -> {
+        appendDiagnostic("Back ack handled id=${resolution.requestId} reason=${resolution.reason ?: "none"}")
+      }
+      is BackHandshakeResolution.RunNativeFallback -> {
+        appendDiagnostic("Back ack unhandled id=${resolution.requestId} reason=${resolution.reason}; applying native fallback.")
+        applyNativeBackFallback(reason = resolution.reason, requestId = resolution.requestId)
+      }
+      is BackHandshakeResolution.Ignored -> {
+        appendDiagnostic("Ignoring back.handled id=$requestId reason=${resolution.reason}")
+      }
+    }
+  }
+
+  private fun applyNativeBackFallback(reason: String, requestId: String?) {
+    appendDiagnostic("Applying native back fallback id=${requestId ?: "none"} reason=$reason")
+    if (webView.canGoBack()) {
+      webView.goBack()
+    } else {
+      finish()
+    }
   }
 
   private fun loadShell() {
@@ -658,11 +743,11 @@ class MainActivity : AppCompatActivity() {
           when (envelope.type) {
             "playback.open" -> {
               lastStructuredPlaybackAtMs = System.currentTimeMillis()
-              if (!openPlayback(envelope.payload)) {
-                appendDiagnostic("Native playback command skipped due to fallback guard.")
-              }
+              val outcome = openPlayback(envelope.payload)
+              handlePlaybackOpenOutcome(outcome, source = "host_command")
             }
             "playback.close" -> PlaybackBridge.requestPlaybackClose(this)
+            "back.handled" -> handleBackHandledCommand(envelope.payload)
             "external.openUrl" -> openExternalUrl(envelope.payload)
             "diagnostics.export" -> exportDiagnostics()
             "updates.check" -> checkForUpdates(manual = true)
@@ -678,50 +763,45 @@ class MainActivity : AppCompatActivity() {
             errorCode = "invalid_command",
             message = error.message ?: "Invalid command envelope."
           )
-          emitHostEvent("playback.result", payload)
+          dispatchPlaybackResult(payload)
         }
       )
     }
   }
 
-  private fun openPlayback(payload: JSONObject): Boolean {
+  private fun openPlayback(payload: JSONObject): PlaybackOpenOutcome {
     val request = NativePlaybackContracts.fromPayload(payload)
-    if (request == null) {
-      val streamId = payload.optString("streamId").ifBlank { null }
-      val errorPayload = HostBridgeContract.createPlaybackPayload(
-        status = "failed",
-        streamId = streamId,
-        errorCode = "missing_url",
-        message = "playback.open command requires payload.url",
-        failureDomain = "host",
-        failureDetail = "invalid_open_payload"
-      )
-      emitHostEvent("playback.result", errorPayload)
-      return false
+    val outcome = PlaybackOpenDecider.classify(
+      payload = payload,
+      request = request,
+      shouldSkipNativePlayback = request?.let {
+        nativeFallbackLoopGuard.shouldSkip(it.url, it.streamId)
+      } ?: false
+    )
+    if (outcome.decision != PlaybackOpenDecision.OPENED) {
+      return outcome
     }
 
-    if (nativeFallbackLoopGuard.shouldSkip(request.url, request.streamId)) {
-      appendDiagnostic(
-        "Skipping native playback due to loop guard streamId=${request.streamId} url=${request.url.take(120)}"
-      )
-      return false
-    }
+    val activeRequest = request ?: return PlaybackOpenOutcome(
+      decision = PlaybackOpenDecision.INVALID_PAYLOAD,
+      streamId = payload.optString("streamId").ifBlank { null }
+    )
 
     val settingsJson = payload.optJSONObject("settings")
     val tracksJson = payload.optJSONObject("tracks")
-    val playbackPositionMs = request.resumePositionMs ?: request.positionMs
+    val playbackPositionMs = activeRequest.resumePositionMs ?: activeRequest.positionMs
 
     val playerIntent = Intent(this, PlayerActivity::class.java).apply {
-      putExtra(PlaybackBridge.EXTRA_URL, request.url)
-      putExtra(PlaybackBridge.EXTRA_STREAM_ID, request.streamId)
-      putExtra(PlaybackBridge.EXTRA_TITLE, request.title)
-      putExtra(PlaybackBridge.EXTRA_SUBTITLE, request.subtitle)
+      putExtra(PlaybackBridge.EXTRA_URL, activeRequest.url)
+      putExtra(PlaybackBridge.EXTRA_STREAM_ID, activeRequest.streamId)
+      putExtra(PlaybackBridge.EXTRA_TITLE, activeRequest.title)
+      putExtra(PlaybackBridge.EXTRA_SUBTITLE, activeRequest.subtitle)
       putExtra(PlaybackBridge.EXTRA_POSITION_MS, playbackPositionMs)
-      putExtra(PlaybackBridge.EXTRA_ARTWORK_URL, request.artworkUrl)
-      putExtra(PlaybackBridge.EXTRA_LOGO_URL, request.logoUrl)
-      putExtra(PlaybackBridge.EXTRA_RESUME_POSITION_MS, request.resumePositionMs ?: -1L)
-      putExtra(PlaybackBridge.EXTRA_FALLBACK_WEB_URL, request.fallbackWebUrl)
-      putExtra(PlaybackBridge.EXTRA_SOURCE_URL, request.sourceUrl)
+      putExtra(PlaybackBridge.EXTRA_ARTWORK_URL, activeRequest.artworkUrl)
+      putExtra(PlaybackBridge.EXTRA_LOGO_URL, activeRequest.logoUrl)
+      putExtra(PlaybackBridge.EXTRA_RESUME_POSITION_MS, activeRequest.resumePositionMs ?: -1L)
+      putExtra(PlaybackBridge.EXTRA_FALLBACK_WEB_URL, activeRequest.fallbackWebUrl)
+      putExtra(PlaybackBridge.EXTRA_SOURCE_URL, activeRequest.sourceUrl)
       if (settingsJson != null) {
         putExtra(PlaybackBridge.EXTRA_SETTINGS_JSON, settingsJson.toString())
       }
@@ -731,10 +811,71 @@ class MainActivity : AppCompatActivity() {
     }
 
     appendDiagnostic(
-      "Opening native playback streamId=${request.streamId} url=${request.url.take(120)} fallback=${request.fallbackWebUrl}"
+      "Opening native playback streamId=${activeRequest.streamId} url=${activeRequest.url.take(120)} fallback=${activeRequest.fallbackWebUrl}"
     )
     startActivity(playerIntent)
-    return true
+    return outcome
+  }
+
+  private fun handlePlaybackOpenOutcome(outcome: PlaybackOpenOutcome, source: String): Boolean {
+    when (outcome.decision) {
+      PlaybackOpenDecision.OPENED -> return true
+      PlaybackOpenDecision.INVALID_PAYLOAD -> {
+        appendDiagnostic("Invalid playback.open payload source=$source streamId=${outcome.streamId ?: "none"}")
+        val errorPayload = HostBridgeContract.createPlaybackPayload(
+          status = "failed",
+          streamId = outcome.streamId,
+          errorCode = "missing_url",
+          message = "playback.open command requires payload.url",
+          url = outcome.url,
+          fallbackWebUrl = outcome.fallbackWebUrl,
+          failureDomain = "host",
+          failureDetail = PlaybackOpenDecider.INVALID_OPEN_PAYLOAD_FAILURE_DETAIL
+        )
+        dispatchPlaybackResult(errorPayload)
+      }
+      PlaybackOpenDecision.BLOCKED_BY_LOOP_GUARD -> {
+        appendDiagnostic(
+          "Native playback blocked by loop guard source=$source streamId=${outcome.streamId} url=${outcome.url?.take(120)}; dispatching fallback."
+        )
+        dispatchLoopGuardPlaybackFailure(
+          streamId = outcome.streamId,
+          url = outcome.url,
+          fallbackWebUrl = outcome.fallbackWebUrl
+        )
+      }
+    }
+    return false
+  }
+
+  private fun dispatchLoopGuardPlaybackFailure(streamId: String?, url: String?, fallbackWebUrl: String?) {
+    val payload = HostBridgeContract.createPlaybackPayload(
+      status = "failed",
+      streamId = streamId,
+      errorCode = "loop_guard_skip",
+      message = "Native playback launch skipped due to loop guard.",
+      url = url,
+      fallbackWebUrl = fallbackWebUrl,
+      fallbackTriggered = true,
+      failureDomain = "host",
+      failureDetail = PlaybackOpenDecider.LOOP_GUARD_FAILURE_DETAIL
+    )
+    dispatchPlaybackResult(payload, processFallback = true)
+  }
+
+  private fun dispatchPlaybackResult(payload: JSONObject, processFallback: Boolean = false) {
+    if (Looper.myLooper() != Looper.getMainLooper()) {
+      runOnUiThread {
+        dispatchPlaybackResult(payload, processFallback)
+      }
+      return
+    }
+
+    if (processFallback) {
+      onPlaybackResult(payload)
+    }
+    val envelope = HostBridgeContract.createEventEnvelope("playback.result", payload)
+    emitHostEventJson(envelope.toString())
   }
 
   private fun openExternalUrl(payload: JSONObject) {
@@ -1099,7 +1240,12 @@ class MainActivity : AppCompatActivity() {
   private fun maybeOpenNativePlaybackFromStreamingServer(streamId: String?, mediaUrl: String, sourceUrl: String): Boolean {
     if (nativeFallbackLoopGuard.shouldSkip(mediaUrl, streamId)) {
       appendDiagnostic(
-        "Skipping native intercept due to fallback guard streamId=$streamId mediaUrl=${mediaUrl.take(120)}"
+        "Skipping native intercept due to fallback guard streamId=$streamId mediaUrl=${mediaUrl.take(120)}; dispatching fallback."
+      )
+      dispatchLoopGuardPlaybackFailure(
+        streamId = streamId,
+        url = mediaUrl,
+        fallbackWebUrl = webView.url?.takeIf { it.isNotBlank() }
       )
       return false
     }
@@ -1126,11 +1272,13 @@ class MainActivity : AppCompatActivity() {
     appendDiagnostic("Intercepted streaming request and opened native playback. source=$sourceUrl")
 
     if (Looper.myLooper() == Looper.getMainLooper()) {
-      return openPlayback(payload)
+      val outcome = openPlayback(payload)
+      return handlePlaybackOpenOutcome(outcome, source = "streaming_intercept")
     }
 
     runOnUiThread {
-      openPlayback(payload)
+      val outcome = openPlayback(payload)
+      handlePlaybackOpenOutcome(outcome, source = "streaming_intercept")
     }
     return true
   }
