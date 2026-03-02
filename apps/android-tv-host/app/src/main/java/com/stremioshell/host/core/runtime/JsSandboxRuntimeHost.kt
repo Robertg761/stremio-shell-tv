@@ -58,72 +58,9 @@ class JsSandboxRuntimeHost(
     val response = callRuntime("__stremioRuntimeInit", payload)
     emitEvents(response)
 
-    // Phase 2: Wait for WASM core to actually finish initializing
-    val supportsPromiseReturn = sandbox?.isFeatureSupported(
-      JavaScriptSandbox.JS_FEATURE_PROMISE_RETURN
-    ) == true
-    Log.d(TAG, "initializeRuntime supportsPromiseReturn=$supportsPromiseReturn")
-
-    if (supportsPromiseReturn) {
-      // The sandbox can natively resolve Promises from evaluateJavaScriptAsync
-      runtimeMutex.withLock {
-        ensureRuntimeLoaded()
-        val isolateRef = isolate ?: error("JS isolate is unavailable.")
-
-        // Diagnostic: check JS environment state before awaiting
-        val diagRaw = evaluateScript(isolateRef, """
-          (() => JSON.stringify({
-            hasFetch: typeof fetch === 'function',
-            hasWebAssembly: typeof WebAssembly === 'object',
-            hasWasmInstantiate: typeof WebAssembly !== 'undefined' && typeof WebAssembly.instantiate === 'function',
-            hasInit: typeof globalThis.init === 'function',
-            hasAwaitInit: typeof globalThis.__stremioAwaitInit === 'function',
-            initStatus: typeof globalThis.__stremioRuntimeInitStatus === 'function' ? globalThis.__stremioRuntimeInitStatus() : 'no_status_fn',
-            hasAndroid: typeof android !== 'undefined',
-            hasConsume: typeof android !== 'undefined' && android && typeof android.consumeNamedDataAsArrayBuffer === 'function',
-            documentBaseURI: typeof document !== 'undefined' && document ? document.baseURI : 'no_document',
-            selfLocationHref: typeof self !== 'undefined' && self.location ? self.location.href : 'no_location'
-          }))();
-        """.trimIndent())
-        Log.d(TAG, "initializeRuntime diag=$diagRaw")
-
-        // Test: does JS_FEATURE_PROMISE_RETURN actually resolve?
-        val simplePromiseTest = evaluateScript(isolateRef, """
-          (async () => {
-            const x = await Promise.resolve(42);
-            return JSON.stringify({ resolved: true, value: x });
-          })();
-        """.trimIndent())
-        Log.d(TAG, "initializeRuntime simplePromiseTest=$simplePromiseTest")
-
-        // Test: does fetch() for the WASM binary work?
-        val fetchTest = evaluateScript(isolateRef, """
-          (async () => {
-            try {
-              const resp = await fetch('stremio_core_web_bg.wasm');
-              const ok = resp && resp.ok;
-              const buf = await resp.arrayBuffer();
-              const byteLen = buf ? buf.byteLength : -1;
-              const result = await WebAssembly.instantiate(buf, {});
-              return JSON.stringify({ fetchOk: ok, byteLength: byteLen, instantiateOk: !!result });
-            } catch (e) {
-              return JSON.stringify({ error: String(e) });
-            }
-          })();
-        """.trimIndent())
-        Log.d(TAG, "initializeRuntime fetchTest=$fetchTest")
-
-        val statusRaw = evaluateScript(isolateRef, "__stremioAwaitInit();")
-        val statusJson = runCatching { JSONObject(statusRaw) }.getOrNull()
-        val coreReady = statusJson?.optBoolean("coreReady", false) ?: false
-        val status = statusJson?.optString("status")?.ifBlank { "unknown" } ?: "unknown"
-        Log.d(TAG, "initializeRuntime awaited status=$status coreReady=$coreReady")
-        coreInitCompleted = true
-      }
-    } else {
-      // Fallback: poll __stremioRuntimeInitStatus between separate eval calls
-      awaitCoreInit()
-    }
+    // Phase 2: Poll __stremioRuntimeInitStatus and pump timers between calls.
+    // In JS sandbox environments, awaiting a long-lived Promise in a single eval can stall.
+    awaitCoreInit()
   }
 
   override suspend fun dispatch(
@@ -203,13 +140,15 @@ class JsSandboxRuntimeHost(
 
   private suspend fun awaitCoreInit() {
     val maxWaitMs = 60_000L
-    val pollIntervalMs = 500L
+    val pollIntervalMs = 100L
     val startMs = System.currentTimeMillis()
+    var lastPendingDiagAtMs = 0L
 
     while (System.currentTimeMillis() - startMs < maxWaitMs) {
       runtimeMutex.withLock {
         ensureRuntimeLoaded()
         val isolateRef = isolate ?: error("JS isolate is unavailable.")
+        evaluateScript(isolateRef, "if (typeof globalThis.__flushTimers === 'function') globalThis.__flushTimers();")
         val statusRaw = evaluateScript(isolateRef, "__stremioRuntimeInitStatus();")
         val statusJson = runCatching { JSONObject(statusRaw) }.getOrNull()
         val status = statusJson?.optString("status")?.ifBlank { "idle" } ?: "idle"
@@ -228,6 +167,48 @@ class JsSandboxRuntimeHost(
           Log.e(TAG, "awaitCoreInit core init failed: $errorMessage")
           return
         }
+        if (status == "pending") {
+          val nowMs = System.currentTimeMillis()
+          if (nowMs - lastPendingDiagAtMs >= 2_000L) {
+            lastPendingDiagAtMs = nowMs
+            val pendingDiag = evaluateScript(
+              isolateRef,
+              """
+                (() => {
+                  try {
+                    const debugState = typeof globalThis.getDebugState === 'function'
+                      ? globalThis.getDebugState()
+                      : null;
+                    const summary = debugState && typeof debugState === 'object'
+                      ? {
+                          keys: Object.keys(debugState).slice(0, 20),
+                          status: debugState.status || debugState.initStatus || debugState.runtimeStatus || null,
+                          coreReady: debugState.coreReady == null ? null : !!debugState.coreReady,
+                          error: debugState.error || debugState.initError || debugState.lastError || null
+                        }
+                      : debugState;
+                    return JSON.stringify({
+                      hasInit: typeof globalThis.init === 'function',
+                      hasDispatch: typeof globalThis.dispatch === 'function',
+                      hasGetState: typeof globalThis.getState === 'function',
+                      hasDebugState: typeof globalThis.getDebugState === 'function',
+                      coreInitState: typeof globalThis.__stremioCoreInitState === 'string'
+                        ? globalThis.__stremioCoreInitState
+                        : null,
+                      coreInitError: typeof globalThis.__stremioCoreInitError === 'string'
+                        ? globalThis.__stremioCoreInitError
+                        : null,
+                      summary: summary
+                    });
+                  } catch (error) {
+                    return JSON.stringify({ error: String(error) });
+                  }
+                })();
+              """.trimIndent()
+            )
+            Log.d(TAG, "awaitCoreInit pendingDiag=$pendingDiag")
+          }
+        }
       }
       delay(pollIntervalMs)
     }
@@ -244,7 +225,13 @@ class JsSandboxRuntimeHost(
       val script = """
         (() => {
           try {
+            if (typeof globalThis.__flushTimers === 'function') {
+              globalThis.__flushTimers();
+            }
             const response = $functionName(${payload.toString()});
+            if (typeof globalThis.__flushTimers === 'function') {
+              globalThis.__flushTimers();
+            }
             if (typeof response === 'string') {
               return response;
             }
@@ -293,8 +280,19 @@ class JsSandboxRuntimeHost(
     val isolateRef = isolate ?: error("JS isolate not available.")
 
     val workerAssetPath = resolveWorkerAssetPath()
-    val workerSource = withContext(dispatcher) {
+    val rawWorkerSource = withContext(dispatcher) {
       appContext.assets.open(workerAssetPath).bufferedReader().use { it.readText() }
+    }
+    val workerSource = rawWorkerSource
+      .replace("o.call([\"location\",\"hash\"],[])", "location.hash")
+      .replace("o.call([\"localStorage\",\"getItem\"],[n])", "localStorage.getItem(n)")
+      .replace("o.call([\"localStorage\",\"setItem\"],[n,r])", "localStorage.setItem(n,r)")
+      .replace("o.call([\"localStorage\",\"removeItem\"],[n])", "localStorage.removeItem(n)")
+      .replace("o.call([\"onCoreEvent\"],[e])", "(typeof onCoreEvent==='function'?onCoreEvent(e):void 0)")
+    if (workerSource != rawWorkerSource) {
+      Log.d(TAG, "Applied direct worker host bridge patch for location/localStorage/onCoreEvent.")
+    } else {
+      Log.w(TAG, "Unable to patch worker bridge callbacks; using upstream RPC callbacks.")
     }
     val runtimeSource = withContext(dispatcher) {
       appContext.assets.open(RUNTIME_ASSET_PATH).bufferedReader().use { it.readText() }
@@ -308,6 +306,10 @@ class JsSandboxRuntimeHost(
     val supportsArrayBufferTransfer = sandbox?.isFeatureSupported(
       JavaScriptSandbox.JS_FEATURE_PROVIDE_CONSUME_ARRAY_BUFFER
     ) == true
+    Log.d(
+      TAG,
+      "wasm bridge support provideConsumeArrayBuffer=$supportsArrayBufferTransfer wasmBytes=${wasmBytes.size}"
+    )
 
     if (supportsArrayBufferTransfer) {
       isolateRef.provideNamedData(wasmDataName, wasmBytes)
@@ -410,7 +412,26 @@ class JsSandboxRuntimeHost(
             return [];
           }
         };
-        if (typeof globalThis.setTimeout !== 'function') {
+        const nativeSetTimeout = typeof globalThis.setTimeout === 'function'
+          ? globalThis.setTimeout.bind(globalThis)
+          : null;
+        const nativeClearTimeout = typeof globalThis.clearTimeout === 'function'
+          ? globalThis.clearTimeout.bind(globalThis)
+          : null;
+        const nativeSetInterval = typeof globalThis.setInterval === 'function'
+          ? globalThis.setInterval.bind(globalThis)
+          : null;
+        const nativeClearInterval = typeof globalThis.clearInterval === 'function'
+          ? globalThis.clearInterval.bind(globalThis)
+          : null;
+
+        if (nativeSetTimeout && nativeClearTimeout && nativeSetInterval && nativeClearInterval) {
+          globalThis.setTimeout = nativeSetTimeout;
+          globalThis.clearTimeout = nativeClearTimeout;
+          globalThis.setInterval = nativeSetInterval;
+          globalThis.clearInterval = nativeClearInterval;
+          globalThis.__flushTimers = function() {};
+        } else {
           let nextTimerId = 1;
           const timers = new Map();
           const scheduleTimer = function(callback, delay, repeating, args) {
@@ -794,6 +815,10 @@ class JsSandboxRuntimeHost(
     val events = response.optJSONArray("events") ?: return
     for (index in 0 until events.length()) {
       val event = events.optJSONObject(index) ?: continue
+      val type = event.optString("type")
+      if (type == "runtime.raw" || type == "runtime.error" || type == "runtime.initialized" || type == "runtime.info") {
+        Log.d(TAG, "runtime event type=$type payload=${event.optJSONObject("payload") ?: JSONObject()}")
+      }
       eventsFlow.emit(CoreEnvelopeParser.parseEvent(event))
     }
   }

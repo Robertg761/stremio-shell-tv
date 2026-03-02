@@ -33,12 +33,6 @@
       </intent-filter>
     </activity>
 
-    <activity
-      android:name=".compose.ComposeMainActivity"
-      android:exported="false"
-      android:launchMode="singleTask"
-      android:theme="@style/Theme.StremioShell.NoActionBar" />
-
     <provider
       android:name="androidx.core.content.FileProvider"
       android:authorities="${applicationId}.fileprovider"

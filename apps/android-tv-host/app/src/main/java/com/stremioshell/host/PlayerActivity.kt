@@ -43,9 +43,6 @@ import java.util.concurrent.Executors
 import kotlin.math.abs
 import org.json.JSONArray
 
-@Deprecated(
-  message = "Legacy XML player retained during migration; ComposePlayerScreen is the active TV runtime player."
-)
 class PlayerActivity : AppCompatActivity() {
   companion object {
     private const val PLAYBACK_START_TIMEOUT_MS = 20_000L

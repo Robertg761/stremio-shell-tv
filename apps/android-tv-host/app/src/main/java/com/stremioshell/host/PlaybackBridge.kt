@@ -4,9 +4,6 @@ import android.content.Context
 import android.content.Intent
 import org.json.JSONObject
 
-@Deprecated(
-  message = "Legacy inter-activity playback bridge retained as migration fixture; Compose runtime uses in-process player events."
-)
 object PlaybackBridge {
   const val ACTION_PLAYBACK_EVENT = "com.stremioshell.host.action.PLAYBACK_EVENT"
   const val ACTION_PLAYBACK_CLOSE = "com.stremioshell.host.action.PLAYBACK_CLOSE"

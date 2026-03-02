@@ -64,6 +64,7 @@ data class CatalogRowUiState(
 
 data class CatalogUiState(
   val featuredIds: List<String> = emptyList(),
+  val featuredIdsByType: Map<String, List<String>> = emptyMap(),
   val rows: List<CatalogRowUiState> = emptyList()
 )
 
@@ -88,6 +89,7 @@ class CatalogRepository(
       val snapshot = runtime.getState(CoreStateQuery(scope = "custom", key = "catalog"))
       val data = snapshot.data as? JSONObject
       val ids = data?.optJSONArray("featuredIds").toStringList()
+      val idsByType = data?.optJSONObject("featuredIdsByType").toStringListMap()
       val rows = data?.optJSONArray("rows").toCatalogRows()
       val fallbackRows = buildList {
         if (ids.isNotEmpty()) {
@@ -107,9 +109,18 @@ class CatalogRepository(
           )
         }
       }
+      val resolvedRows = if (rows.isNullOrEmpty()) fallbackRows else rows
+      val movieFeaturedIds = idsByType["movie"].orEmpty()
+      val seriesFeaturedIds = idsByType["series"].orEmpty()
+      val fallbackMovieIds = resolvedRows.firstOrNull { it.id.contains("movie", ignoreCase = true) }?.items.orEmpty()
+      val fallbackSeriesIds = resolvedRows.firstOrNull { it.id.contains("series", ignoreCase = true) }?.items.orEmpty()
       state.value = CatalogUiState(
-        featuredIds = ids,
-        rows = if (rows.isNullOrEmpty()) fallbackRows else rows
+        featuredIds = if (ids.isNotEmpty()) ids else if (movieFeaturedIds.isNotEmpty()) movieFeaturedIds else seriesFeaturedIds,
+        featuredIdsByType = mapOf(
+          "movie" to if (movieFeaturedIds.isNotEmpty()) movieFeaturedIds else fallbackMovieIds,
+          "series" to if (seriesFeaturedIds.isNotEmpty()) seriesFeaturedIds else fallbackSeriesIds
+        ),
+        rows = resolvedRows
       )
     }
   }
@@ -351,6 +362,20 @@ private fun JSONObject?.toStringMap(): Map<String, String> {
   while (iterator.hasNext()) {
     val key = iterator.next()
     map[key] = optString(key)
+  }
+  return map
+}
+
+private fun JSONObject?.toStringListMap(): Map<String, List<String>> {
+  if (this == null) {
+    return emptyMap()
+  }
+
+  val map = linkedMapOf<String, List<String>>()
+  val iterator = keys()
+  while (iterator.hasNext()) {
+    val key = iterator.next()
+    map[key] = optJSONArray(key).toStringList()
   }
   return map
 }

@@ -10,6 +10,8 @@
   const runtime = {
     coreInitPromise: null,
     coreReady: false,
+    coreReadyEventSent: false,
+    ctxBootstrapDispatched: false,
     initStartedAtMs: 0,
     initStatus: "idle",
     initErrorMessage: null,
@@ -113,6 +115,22 @@
     }
   };
 
+  const isRuntimeNotReadyError = function (value) {
+    return typeof value === "string" && value.indexOf("runtimeNotReady") >= 0;
+  };
+
+  const markCoreReady = function (source) {
+    if (!runtime.coreReady) {
+      runtime.coreReady = true;
+      runtime.initStatus = "ready";
+      runtime.initErrorMessage = null;
+    }
+    if (!runtime.coreReadyEventSent) {
+      runtime.coreReadyEventSent = true;
+      pushEvent("runtime.initialized", { source: source || "stremio-core" });
+    }
+  };
+
   const coreDispatch = function (action, fieldOrLocationHash, maybeLocationHash) {
     let field = null;
     let locationHash = "";
@@ -132,6 +150,7 @@
       globalThis.dispatch(action, field, locationHash || "");
       runtime.dispatchSuccessCount += 1;
       runtime.lastDispatchError = null;
+      markCoreReady("stremio-core");
       return true;
     } catch (error) {
       runtime.dispatchFailureCount += 1;
@@ -151,8 +170,26 @@
           return String(error);
         }
       })();
+      if (isRuntimeNotReadyError(runtime.lastDispatchError)) {
+        runtime.coreReady = false;
+        runtime.ctxBootstrapDispatched = false;
+        if (runtime.initStatus === "ready") {
+          runtime.initStatus = "pending";
+        }
+      }
       return false;
     }
+  };
+
+  const bootstrapCoreContext = function (force) {
+    if (!force && runtime.ctxBootstrapDispatched) {
+      return;
+    }
+    runtime.ctxBootstrapDispatched = true;
+    coreDispatch({ action: "Ctx", args: { action: "PullAddonsFromAPI" } }, "");
+    coreDispatch({ action: "Ctx", args: { action: "PullUserFromAPI", args: {} } }, "");
+    coreDispatch({ action: "Ctx", args: { action: "SyncLibraryWithAPI" } }, "");
+    coreDispatch({ action: "Ctx", args: { action: "PullNotifications" } }, "");
   };
 
   const hasReadyContent = function (content) {
@@ -198,6 +235,31 @@
     return items;
   };
 
+  const catalogMatchesType = function (catalog, type) {
+    if (!catalog || typeof catalog !== "object") {
+      return false;
+    }
+
+    const directType = typeof catalog.type === "string" ? catalog.type.trim().toLowerCase() : "";
+    if (directType !== "") {
+      return directType === type;
+    }
+
+    const request = catalog.request && typeof catalog.request === "object" ? catalog.request : null;
+    const extra = request && request.extra && typeof request.extra === "object" ? request.extra : null;
+    const extraType = extra && typeof extra.type === "string" ? extra.type.trim().toLowerCase() : "";
+    if (extraType !== "") {
+      return extraType === type;
+    }
+
+    const id = typeof catalog.id === "string" ? catalog.id.toLowerCase() : "";
+    if (id.indexOf(type) >= 0) {
+      return true;
+    }
+
+    return false;
+  };
+
   const scheduleCatalogRefresh = function (type) {
     if (runtime.catalogRefreshTimers[type] != null) {
       return;
@@ -214,6 +276,7 @@
       return;
     }
     runtime.catalogRefreshAt[type] = now();
+    bootstrapCoreContext(false);
 
     coreDispatch(
       {
@@ -242,10 +305,20 @@
 
     const board = safeGetState("board");
     const catalogs = board && Array.isArray(board.catalogs) ? board.catalogs : [];
-    runtime.catalogByType[type] = catalogs;
+    const typedCatalogs = [];
 
     for (let index = 0; index < catalogs.length; index += 1) {
-      extractIdsFromContent(catalogs[index] && catalogs[index].content);
+      const catalog = catalogs[index];
+      if (catalogMatchesType(catalog, type)) {
+        typedCatalogs.push(catalog);
+      }
+    }
+
+    const nextCatalogs = typedCatalogs.length > 0 ? typedCatalogs : catalogs;
+    runtime.catalogByType[type] = nextCatalogs;
+
+    for (let index = 0; index < nextCatalogs.length; index += 1) {
+      extractIdsFromContent(nextCatalogs[index] && nextCatalogs[index].content);
     }
 
     scheduleCatalogRefresh(type);
@@ -307,7 +380,13 @@
     const seriesRow = pickCatalogRow("series", "Popular - Series");
 
     const rows = [movieRow, seriesRow];
-    const featuredIds = movieRow.items.slice(0, 20);
+    const featuredIdsByType = {
+      movie: movieRow.items.slice(0, 20),
+      series: seriesRow.items.slice(0, 20),
+    };
+    const featuredIds = featuredIdsByType.movie.length > 0
+      ? featuredIdsByType.movie
+      : featuredIdsByType.series;
 
     return {
       coreReady: runtime.coreReady,
@@ -320,6 +399,7 @@
       hasBoardState: !!rawBoard,
       boardCatalogCount: boardCatalogCount,
       featuredIds: featuredIds,
+      featuredIdsByType: featuredIdsByType,
       rows: rows,
     };
   };
@@ -547,11 +627,10 @@
         shellVersion: globalThis.shell_version || "0.1.1-tv",
       })
     ).then(function () {
-      runtime.coreReady = true;
-      runtime.initStatus = "ready";
-      runtime.initErrorMessage = null;
-      pushEvent("runtime.initialized", { source: "stremio-core" });
-
+      return globalThis.__stremioCoreInitPromise || Promise.resolve();
+    }).then(function () {
+      pushEvent("runtime.info", { code: "worker_init_resolved" });
+      bootstrapCoreContext(true);
       coreDispatch({ action: "Link", args: { action: "ReadData" } }, "");
       refreshCatalogType("movie", true);
       refreshCatalogType("series", true);
@@ -566,6 +645,9 @@
       });
     });
     runtime.initStartedAtMs = now();
+    runtime.coreReady = false;
+    runtime.coreReadyEventSent = false;
+    runtime.ctxBootstrapDispatched = false;
     runtime.initStatus = "pending";
     runtime.initErrorMessage = null;
 

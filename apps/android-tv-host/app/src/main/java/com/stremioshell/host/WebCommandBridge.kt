@@ -2,9 +2,6 @@ package com.stremioshell.host
 
 import android.webkit.JavascriptInterface
 
-@Deprecated(
-  message = "Legacy WebView command bridge. Compose runtime path does not use window.stremioHost."
-)
 class WebCommandBridge(
   private val onCommand: (commandJson: String) -> Unit
 ) {
