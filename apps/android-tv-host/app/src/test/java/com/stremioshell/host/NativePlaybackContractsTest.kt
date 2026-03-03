@@ -22,6 +22,15 @@ class NativePlaybackContractsTest {
       .put("fallbackWebUrl", "#/player/example")
       .put("settings", JSONObject().put("audioLanguage", "eng").put("surroundSound", true))
       .put("tracks", JSONObject().put("selectedAudioTrackId", "audio-eng"))
+      .put(
+        "navigationContext",
+        JSONObject()
+          .put("routeHash", "#/meta-details/tt123")
+          .put("zone", "content")
+          .put("focusKey", "stream-card:3")
+          .put("scrollY", 318)
+          .put("sessionId", "sess-1")
+      )
 
     val request = NativePlaybackContracts.fromPayload(payload)
 
@@ -32,6 +41,8 @@ class NativePlaybackContractsTest {
     assertEquals(true, request?.settings?.surroundSound)
     assertEquals("audio-eng", request?.tracks?.selectedAudioTrackId)
     assertEquals("#/player/example", request?.fallbackWebUrl)
+    assertEquals("#/meta-details/tt123", request?.navigationContext?.optString("routeHash"))
+    assertEquals("stream-card:3", request?.navigationContext?.optString("focusKey"))
   }
 
   @Test

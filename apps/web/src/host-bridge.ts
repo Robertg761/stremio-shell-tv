@@ -4,6 +4,7 @@ import {
   type HostCommand,
   type HostEvent,
   type JsonObject,
+  type NavigationContext,
   type NativePlaybackSettings,
   type NativePlaybackTracks
 } from "./types/host-bridge";
@@ -82,6 +83,7 @@ type PlaybackOpenPayload = {
   fallbackWebUrl?: string;
   settings?: NativePlaybackSettings;
   tracks?: NativePlaybackTracks;
+  navigationContext?: NavigationContext;
 };
 
 export function createPlaybackOpenCommand(payload: PlaybackOpenPayload): HostCommand {
@@ -97,6 +99,7 @@ export function createPlaybackOpenCommand(payload: PlaybackOpenPayload): HostCom
     fallbackWebUrl?: string;
     settings?: JsonObject;
     tracks?: JsonObject;
+    navigationContext?: JsonObject;
   } = {
     streamId: payload.streamId,
     url: payload.url,
@@ -115,6 +118,10 @@ export function createPlaybackOpenCommand(payload: PlaybackOpenPayload): HostCom
 
   if (payload.tracks) {
     normalizedPayload.tracks = payload.tracks as unknown as JsonObject;
+  }
+
+  if (payload.navigationContext) {
+    normalizedPayload.navigationContext = payload.navigationContext as unknown as JsonObject;
   }
 
   return createHostEnvelope("playback.open", normalizedPayload);

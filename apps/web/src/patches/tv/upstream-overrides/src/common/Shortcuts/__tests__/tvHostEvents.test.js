@@ -42,9 +42,20 @@ describe('tvHostEvents', () => {
         expect(classifyRoute('#/unknown')).toBe('default');
     });
 
+    test('route classifier distinguishes meta details videos and streams', () => {
+        expect(classifyRoute('#/meta-details/tt123')).toBe('metaDetailsVideos');
+        expect(classifyRoute('#/meta-details/tt123/streams')).toBe('metaDetailsStreams');
+        expect(classifyRoute('#/meta-details/tt123?selected=stream')).toBe('metaDetailsStreams');
+    });
+
     test('focus selector map always returns a non-empty list', () => {
         const selectors = getRouteFocusSelectors('#/settings');
         expect(Array.isArray(selectors)).toBe(true);
         expect(selectors.length).toBeGreaterThan(0);
+    });
+
+    test('meta details stream selectors include stream controls', () => {
+        const selectors = getRouteFocusSelectors('#/meta-details/tt100/streams');
+        expect(selectors.some((selector) => selector.includes('stream-container'))).toBe(true);
     });
 });

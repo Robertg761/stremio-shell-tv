@@ -1,5 +1,5 @@
 import { createPlaybackOpenCommand, sendHostCommand } from "../../host-bridge";
-import type { NativePlaybackSettings, NativePlaybackTracks } from "../../types/host-bridge";
+import type { NavigationContext, NativePlaybackSettings, NativePlaybackTracks } from "../../types/host-bridge";
 
 type NativePlaybackOpenPayload = {
   streamId?: string;
@@ -13,6 +13,7 @@ type NativePlaybackOpenPayload = {
   fallbackWebUrl?: string;
   settings?: NativePlaybackSettings;
   tracks?: NativePlaybackTracks;
+  navigationContext?: NavigationContext;
 };
 
 declare global {
@@ -20,6 +21,7 @@ declare global {
     stremioShellNativePlayback?: {
       open: (payload: NativePlaybackOpenPayload) => void;
     };
+    __stremioTvNavigationContext?: NavigationContext;
   }
 }
 
@@ -35,6 +37,7 @@ function createStreamId(payload: NativePlaybackOpenPayload): string {
 
 function dispatchNativePlayback(payload: NativePlaybackOpenPayload): void {
   const streamId = createStreamId(payload);
+  const navigationContext = payload.navigationContext ?? window.__stremioTvNavigationContext;
   sendHostCommand(
     createPlaybackOpenCommand({
       streamId,
@@ -47,7 +50,8 @@ function dispatchNativePlayback(payload: NativePlaybackOpenPayload): void {
       resumePositionMs: payload.resumePositionMs,
       fallbackWebUrl: payload.fallbackWebUrl,
       settings: payload.settings,
-      tracks: payload.tracks
+      tracks: payload.tracks,
+      navigationContext
     })
   );
 }

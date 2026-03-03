@@ -12,10 +12,27 @@ const ROUTE_FOCUS_SELECTORS = {
         '[class*="meta-item-container"]',
         '[class*="button-container"]'
     ],
-    metaDetails: [
+    metaDetailsVideos: [
+        '[class*="back-button"]',
+        '[aria-label="Back"]',
+        '[class*="seasons-bar"] [class*="button-container"]',
+        '[class*="season-picker"] [class*="button-container"]',
+        '[class*="episode-picker"] [class*="button-container"]',
+        '[class*="meta-item-container"]',
+        '[class*="addon"] [class*="button-container"]',
+        '[class*="install"] [class*="button-container"]',
+        '[class*="button-container"]'
+    ],
+    metaDetailsStreams: [
+        '[class*="back-button"]',
+        '[aria-label="Back"]',
+        '[class*="stream-container"][class*="selected"]',
         '[class*="stream-container"]',
+        '[class*="streams-container"] [class*="button-container"]',
+        '[class*="filter"] [class*="button-container"]',
+        '[class*="addon"] [class*="button-container"]',
+        '[class*="install"] [class*="button-container"]',
         '[class*="button-container"]',
-        '[class*="meta-item-container"]'
     ],
     settings: [
         '[class*="menu-option-container"][class*="selected"]',
@@ -45,11 +62,27 @@ const ROUTE_FOCUS_SELECTORS = {
     ]
 };
 
+const isMetaDetailsStreamsRoute = (normalizedHash) => {
+    if (!normalizedHash.startsWith('#/meta-details')) {
+        return false;
+    }
+
+    return (
+        normalizedHash.includes('/streams') ||
+        normalizedHash.includes('streams=true') ||
+        normalizedHash.includes('stream=true') ||
+        normalizedHash.includes('selected=stream') ||
+        normalizedHash.includes('streamid=')
+    );
+};
+
 const classifyRoute = (hash = '') => {
     const normalized = String(hash || '').toLowerCase();
     if (normalized.startsWith('#/player')) return 'player';
     if (normalized.startsWith('#/discover')) return 'discover';
-    if (normalized.startsWith('#/meta-details')) return 'metaDetails';
+    if (normalized.startsWith('#/meta-details')) {
+        return isMetaDetailsStreamsRoute(normalized) ? 'metaDetailsStreams' : 'metaDetailsVideos';
+    }
     if (normalized.startsWith('#/settings')) return 'settings';
     if (normalized.startsWith('#/search')) return 'search';
     if (

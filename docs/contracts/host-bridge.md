@@ -33,6 +33,8 @@ Defines web-to-host commands and host-to-web events for native wrappers.
     - `failureDomain: "native_audio" | "network" | "decode" | "unsupported" | "host" | "unknown"`
     - `failureDetail: string`
     - `settingsDiagnostics: Array<object>`
+    - `exitReason: "user_back" | "user_exit" | "end" | "error" | "background"`
+    - `navigationContext: { routeHash?, zone?, focusKey?, scrollY?, timestampMs?, sessionId? }`
   - Host behavior notes:
     - When native playback launch is skipped by host loop guard, host emits `status: "failed"` with:
       - `fallbackTriggered: true`
@@ -53,6 +55,7 @@ Defines web-to-host commands and host-to-web events for native wrappers.
     - `fallbackWebUrl: string`
     - `settings: object`
     - `tracks: object`
+    - `navigationContext: { routeHash?, zone?, focusKey?, scrollY?, timestampMs?, sessionId? }`
 - `playback.close`
 - `external.openUrl`
 - `diagnostics.export`

@@ -20,6 +20,7 @@ object PlaybackBridge {
   const val EXTRA_SETTINGS_JSON = "settings_json"
   const val EXTRA_TRACKS_JSON = "tracks_json"
   const val EXTRA_SOURCE_URL = "source_url"
+  const val EXTRA_NAVIGATION_CONTEXT_JSON = "navigation_context_json"
 
   fun sendPlaybackEvent(context: Context, payload: JSONObject) {
     val event = HostBridgeContract.createEventEnvelope("playback.result", payload)

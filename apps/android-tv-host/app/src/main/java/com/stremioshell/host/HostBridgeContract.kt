@@ -59,7 +59,9 @@ object HostBridgeContract {
     fallbackTriggered: Boolean? = null,
     failureDomain: String? = null,
     failureDetail: String? = null,
-    settingsDiagnostics: JSONArray? = null
+    settingsDiagnostics: JSONArray? = null,
+    exitReason: String? = null,
+    navigationContext: JSONObject? = null
   ): JSONObject {
     return JSONObject().apply {
       put("status", status)
@@ -92,6 +94,12 @@ object HostBridgeContract {
       }
       if (settingsDiagnostics != null) {
         put("settingsDiagnostics", settingsDiagnostics)
+      }
+      if (!exitReason.isNullOrBlank()) {
+        put("exitReason", exitReason)
+      }
+      if (navigationContext != null) {
+        put("navigationContext", navigationContext)
       }
     }
   }

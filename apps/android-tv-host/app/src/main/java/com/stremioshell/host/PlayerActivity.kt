@@ -42,6 +42,7 @@ import java.net.URL
 import java.util.concurrent.Executors
 import kotlin.math.abs
 import org.json.JSONArray
+import org.json.JSONObject
 
 class PlayerActivity : AppCompatActivity() {
   companion object {
@@ -65,6 +66,7 @@ class PlayerActivity : AppCompatActivity() {
   private var hasFailed = false
   private var hasCompleted = false
   private var fallbackTriggered = false
+  private var hasExitEventDispatched = false
   private var introAnimationCompleted = false
   private var unsupportedSettingsNoticeShown = false
   private var currentResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -126,7 +128,9 @@ class PlayerActivity : AppCompatActivity() {
         message = "No media URL provided to player.",
         failureDomain = "host",
         failureDetail = "invalid_intent_payload",
-        fallbackTriggered = false
+        fallbackTriggered = false,
+        exitReason = "error",
+        navigationContext = currentNavigationContext()
       )
       PlaybackBridge.sendPlaybackEvent(this, payload)
       finish()
@@ -194,6 +198,9 @@ class PlayerActivity : AppCompatActivity() {
           playerView.hideController()
           return true
         }
+        dispatchUserExit(reason = "user_back")
+        finish()
+        return true
       }
     }
 
@@ -209,13 +216,15 @@ class PlayerActivity : AppCompatActivity() {
 
   override fun onStop() {
     super.onStop()
-    if (hasStarted && !hasCompleted && !hasFailed) {
+    if (hasStarted && !hasCompleted && !hasFailed && !hasExitEventDispatched) {
       PlaybackBridge.sendPlaybackEvent(this, HostBridgeContract.createPlaybackPayload(
         status = "paused",
         streamId = request?.streamId,
         url = request?.url,
         fallbackWebUrl = request?.fallbackWebUrl,
-        resumePositionMs = player?.currentPosition ?: request?.positionMs
+        resumePositionMs = player?.currentPosition ?: request?.positionMs,
+        exitReason = "background",
+        navigationContext = currentNavigationContext()
       ))
     }
   }
@@ -299,7 +308,8 @@ class PlayerActivity : AppCompatActivity() {
                 url = playbackRequest.url,
                 fallbackWebUrl = playbackRequest.fallbackWebUrl,
                 resumePositionMs = player?.currentPosition ?: playbackRequest.positionMs,
-                settingsDiagnostics = diagnostics
+                settingsDiagnostics = diagnostics,
+                navigationContext = currentNavigationContext()
               )
             )
             if (!BuildConfig.IS_TV) {
@@ -313,7 +323,8 @@ class PlayerActivity : AppCompatActivity() {
                 streamId = playbackRequest.streamId,
                 url = playbackRequest.url,
                 fallbackWebUrl = playbackRequest.fallbackWebUrl,
-                resumePositionMs = player?.currentPosition ?: playbackRequest.positionMs
+                resumePositionMs = player?.currentPosition ?: playbackRequest.positionMs,
+                navigationContext = currentNavigationContext()
               )
             )
           }
@@ -325,7 +336,8 @@ class PlayerActivity : AppCompatActivity() {
               streamId = playbackRequest.streamId,
               url = playbackRequest.url,
               fallbackWebUrl = playbackRequest.fallbackWebUrl,
-              resumePositionMs = player?.currentPosition ?: playbackRequest.positionMs
+              resumePositionMs = player?.currentPosition ?: playbackRequest.positionMs,
+              navigationContext = currentNavigationContext()
             )
           )
         }
@@ -340,6 +352,7 @@ class PlayerActivity : AppCompatActivity() {
         if (state == Player.STATE_ENDED) {
           cancelPlaybackStartTimeout()
           hasCompleted = true
+          hasExitEventDispatched = true
           PlaybackBridge.sendPlaybackEvent(
             this@PlayerActivity,
             HostBridgeContract.createPlaybackPayload(
@@ -347,7 +360,9 @@ class PlayerActivity : AppCompatActivity() {
               streamId = playbackRequest.streamId,
               url = playbackRequest.url,
               fallbackWebUrl = playbackRequest.fallbackWebUrl,
-              resumePositionMs = player?.currentPosition ?: playbackRequest.positionMs
+              resumePositionMs = player?.currentPosition ?: playbackRequest.positionMs,
+              exitReason = "end",
+              navigationContext = currentNavigationContext()
             )
           )
           finish()
@@ -380,7 +395,9 @@ class PlayerActivity : AppCompatActivity() {
             fallbackTriggered = false,
             failureDomain = "decode",
             failureDetail = error.errorCodeName,
-            settingsDiagnostics = diagnostics
+            settingsDiagnostics = diagnostics,
+            exitReason = "error",
+            navigationContext = currentNavigationContext()
           )
         )
         finish()
@@ -595,6 +612,7 @@ class PlayerActivity : AppCompatActivity() {
 
     fallbackTriggered = true
     hasFailed = true
+    hasExitEventDispatched = true
     cancelPlaybackStartTimeout()
     Log.w(TAG, "triggerPlaybackFallback code=$errorCode domain=$failureDomain detail=$detail message=$message")
     val activeRequest = request ?: return
@@ -613,7 +631,9 @@ class PlayerActivity : AppCompatActivity() {
         fallbackTriggered = true,
         failureDomain = failureDomain,
         failureDetail = detail,
-        settingsDiagnostics = diagnostics
+        settingsDiagnostics = diagnostics,
+        exitReason = "error",
+        navigationContext = currentNavigationContext()
       )
     )
 
@@ -655,6 +675,30 @@ class PlayerActivity : AppCompatActivity() {
       Toast.LENGTH_LONG
     ).show()
     Log.w(TAG, "Unsupported native playback settings: ${unsupported.joinToString(", ")}")
+  }
+
+  private fun dispatchUserExit(reason: String) {
+    if (hasExitEventDispatched || !hasStarted || hasCompleted || hasFailed) {
+      return
+    }
+    hasExitEventDispatched = true
+    PlaybackBridge.sendPlaybackEvent(
+      this,
+      HostBridgeContract.createPlaybackPayload(
+        status = "paused",
+        streamId = request?.streamId,
+        url = request?.url,
+        fallbackWebUrl = request?.fallbackWebUrl,
+        resumePositionMs = player?.currentPosition ?: request?.positionMs,
+        exitReason = reason,
+        navigationContext = currentNavigationContext()
+      )
+    )
+  }
+
+  private fun currentNavigationContext(): JSONObject? {
+    val context = request?.navigationContext ?: return null
+    return JSONObject(context.toString())
   }
 
   private fun isLikelyAudioFailure(error: PlaybackException): Boolean {

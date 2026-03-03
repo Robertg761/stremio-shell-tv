@@ -53,7 +53,7 @@ class MainActivity : AppCompatActivity() {
     private const val STARTUP_TIMEOUT_MS = 12000L
     private const val LOCAL_STREAMING_PORT = 11470
     private const val NATIVE_PLAYBACK_DEDUP_MS = 3000L
-    private const val BACK_ACK_TIMEOUT_MS = 250L
+    private const val BACK_ACK_TIMEOUT_MS = 450L
   }
 
   private lateinit var webView: WebView
@@ -669,8 +669,38 @@ class MainActivity : AppCompatActivity() {
 
   private fun applyNativeBackFallback(reason: String, requestId: String?) {
     appendDiagnostic("Applying native back fallback id=${requestId ?: "none"} reason=$reason")
+    if (webReady) {
+      val script = """
+        (() => {
+          try {
+            const currentHash = String(window.location.hash || '');
+            const rootHashes = new Set(['', '#', '#/', '#/board']);
+            if (!rootHashes.has(currentHash) && window.history && typeof window.history.back === 'function') {
+              window.history.back();
+              return 'router_back';
+            }
+          } catch (_) {}
+          return 'native_back';
+        })();
+      """.trimIndent()
+      webView.evaluateJavascript(script) { rawResult ->
+        if (rawResult?.trim('"') == "router_back") {
+          appendDiagnostic("Back fallback resolved via router history.")
+          requestWebViewFocusIfTv()
+          return@evaluateJavascript
+        }
+        runNativeHistoryFallback()
+      }
+      return
+    }
+
+    runNativeHistoryFallback()
+  }
+
+  private fun runNativeHistoryFallback() {
     if (webView.canGoBack()) {
       webView.goBack()
+      requestWebViewFocusIfTv()
     } else {
       finish()
     }
@@ -807,6 +837,9 @@ class MainActivity : AppCompatActivity() {
       }
       if (tracksJson != null) {
         putExtra(PlaybackBridge.EXTRA_TRACKS_JSON, tracksJson.toString())
+      }
+      if (activeRequest.navigationContext != null) {
+        putExtra(PlaybackBridge.EXTRA_NAVIGATION_CONTEXT_JSON, activeRequest.navigationContext.toString())
       }
     }
 

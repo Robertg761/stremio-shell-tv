@@ -9,7 +9,7 @@ import org.junit.Test
 class BackHandshakeControllerTest {
   @Test
   fun `acknowledge handled resolves without fallback`() {
-    val controller = BackHandshakeController(timeoutMs = 250L)
+    val controller = BackHandshakeController(timeoutMs = 450L)
     val pending = controller.begin(requestId = "req-1", nowMs = 1_000L)
 
     assertNotNull(pending)
@@ -29,7 +29,7 @@ class BackHandshakeControllerTest {
 
   @Test
   fun `acknowledge unhandled triggers native fallback`() {
-    val controller = BackHandshakeController(timeoutMs = 250L)
+    val controller = BackHandshakeController(timeoutMs = 450L)
     controller.begin(requestId = "req-2", nowMs = 2_000L)
 
     val resolution = controller.acknowledge(
@@ -48,10 +48,10 @@ class BackHandshakeControllerTest {
 
   @Test
   fun `timeout triggers native fallback when pending request expires`() {
-    val controller = BackHandshakeController(timeoutMs = 250L)
+    val controller = BackHandshakeController(timeoutMs = 450L)
     controller.begin(requestId = "req-3", nowMs = 3_000L)
 
-    val resolution = controller.onTimeout(requestId = "req-3", nowMs = 3_260L)
+    val resolution = controller.onTimeout(requestId = "req-3", nowMs = 3_460L)
 
     assertTrue(resolution is BackHandshakeResolution.RunNativeFallback)
     val fallback = resolution as BackHandshakeResolution.RunNativeFallback
@@ -62,7 +62,7 @@ class BackHandshakeControllerTest {
 
   @Test
   fun `acknowledge with mismatched request id is ignored`() {
-    val controller = BackHandshakeController(timeoutMs = 250L)
+    val controller = BackHandshakeController(timeoutMs = 450L)
     controller.begin(requestId = "req-4", nowMs = 4_000L)
 
     val resolution = controller.acknowledge(
@@ -80,7 +80,7 @@ class BackHandshakeControllerTest {
 
   @Test
   fun `begin returns null while another request is pending`() {
-    val controller = BackHandshakeController(timeoutMs = 250L)
+    val controller = BackHandshakeController(timeoutMs = 450L)
     controller.begin(requestId = "req-5", nowMs = 5_000L)
 
     val second = controller.begin(requestId = "req-6", nowMs = 5_010L)

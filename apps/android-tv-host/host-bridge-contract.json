@@ -24,8 +24,8 @@
   "notes": [
     "Android host should reject envelopes where version != 1.",
     "Payloads must be JSON-serializable before sending to apps/web.",
-    "playback.open may include optional fields: artworkUrl, logoUrl, resumePositionMs, fallbackWebUrl, settings, tracks.",
-    "playback.result may include optional fields: fallbackTriggered, failureDomain, failureDetail, settingsDiagnostics.",
+    "playback.open may include optional fields: artworkUrl, logoUrl, resumePositionMs, fallbackWebUrl, settings, tracks, navigationContext.",
+    "playback.result may include optional fields: fallbackTriggered, failureDomain, failureDetail, settingsDiagnostics, exitReason, navigationContext.",
     "When host loop guard blocks native launch, playback.result should use failureDetail=loop_guard_skip with fallbackTriggered=true.",
     "back.pressed payload includes requestId for deterministic back acknowledgement.",
     "back.handled command acknowledges a specific back requestId with handled boolean."

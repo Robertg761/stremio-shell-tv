@@ -22,6 +22,14 @@ export const playbackOpenContractSample: HostCommand = createHostEnvelope("playb
     selectedSubtitlesTrackId: "subs-eng",
     audioTracks: [{ id: "audio-eng", lang: "eng", label: "English" }],
     subtitlesTracks: [{ id: "subs-eng", lang: "eng", label: "English CC" }]
+  },
+  navigationContext: {
+    routeHash: "#/meta-details/tt123/tt123:1:2",
+    zone: "content" as const,
+    focusKey: "stream:1",
+    scrollY: 420,
+    timestampMs: Date.now(),
+    sessionId: "tv-nav-session-1"
   }
 });
 
@@ -33,7 +41,16 @@ export const playbackResultContractSample: HostEvent = createHostEnvelope("playb
   fallbackTriggered: true,
   failureDomain: "native_audio" as const,
   failureDetail: "ready_without_audio_track",
-  resumePositionMs: 34_000
+  resumePositionMs: 34_000,
+  exitReason: "error" as const,
+  navigationContext: {
+    routeHash: "#/meta-details/tt123/tt123:1:2",
+    zone: "content" as const,
+    focusKey: "stream:1",
+    scrollY: 420,
+    timestampMs: Date.now(),
+    sessionId: "tv-nav-session-1"
+  }
 });
 
 export const backPressedContractSample: HostEvent = createHostEnvelope("back.pressed", {

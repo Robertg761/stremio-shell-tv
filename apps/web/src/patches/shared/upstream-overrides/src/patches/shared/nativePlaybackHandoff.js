@@ -260,6 +260,54 @@ function createSettingsSnapshot(settings, forceTranscoding, streamingServer) {
   return snapshot;
 }
 
+function resolveNavigationContext() {
+  const context = globalThis.__stremioTvNavigationContext;
+  if (!isPlainObject(context)) {
+    return undefined;
+  }
+
+  const payload = {};
+  const routeHash = firstString([context.routeHash, typeof window !== "undefined" ? window.location.hash : null]);
+  if (routeHash) {
+    payload.routeHash = routeHash;
+  }
+
+  const zone = firstString([context.zone]);
+  if (zone && ["sidebar", "topbar", "content", "overlay", "unknown"].includes(zone)) {
+    payload.zone = zone;
+  }
+
+  const focusKey = firstString([context.focusKey]);
+  if (focusKey) {
+    payload.focusKey = focusKey;
+  }
+
+  const scrollY = typeof context.scrollY === "number" && Number.isFinite(context.scrollY)
+    ? Math.max(0, Math.round(context.scrollY))
+    : (typeof window !== "undefined" && typeof window.scrollY === "number" ? Math.max(0, Math.round(window.scrollY)) : undefined);
+  if (typeof scrollY === "number") {
+    payload.scrollY = scrollY;
+  }
+
+  const sessionId = firstString([context.sessionId]);
+  if (sessionId) {
+    payload.sessionId = sessionId;
+  }
+
+  payload.timestampMs = Date.now();
+  return Object.keys(payload).length > 0 ? payload : undefined;
+}
+
+function markPlaybackOpeningTransition() {
+  if (typeof document === "undefined" || !document.body) {
+    return;
+  }
+  document.body.classList.add("stremio-tv-playback-opening");
+  window.setTimeout(() => {
+    document.body.classList.remove("stremio-tv-playback-opening");
+  }, 650);
+}
+
 function shouldSkipNativeForUrl(url) {
   const skipMap = globalThis.__stremioNativeSkipUrls;
   if (!isPlainObject(skipMap)) {
@@ -322,10 +370,12 @@ function openNativePlaybackForStream({ player, settings, forceTranscoding, strea
     logoUrl: firstString([metaItem?.logo]) ?? undefined,
     fallbackWebUrl,
     settings: createSettingsSnapshot(settings, forceTranscoding, streamingServer),
-    tracks: createTracksSnapshot(player)
+    tracks: createTracksSnapshot(player),
+    navigationContext: resolveNavigationContext()
   };
 
   try {
+    markPlaybackOpeningTransition();
     nativePlaybackBridge.open(payload);
     return true;
   } catch (error) {

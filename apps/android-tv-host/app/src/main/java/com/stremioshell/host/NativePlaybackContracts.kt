@@ -53,7 +53,8 @@ data class NativePlaybackRequest(
   val fallbackWebUrl: String?,
   val settings: NativePlaybackSettings,
   val tracks: NativePlaybackTracks,
-  val sourceUrl: String?
+  val sourceUrl: String?,
+  val navigationContext: JSONObject? = null
 )
 
 object NativePlaybackContracts {
@@ -79,7 +80,8 @@ object NativePlaybackContracts {
       fallbackWebUrl = payload.optStringOrNull("fallbackWebUrl"),
       settings = parseSettings(payload.optJSONObject("settings")),
       tracks = parseTracks(payload.optJSONObject("tracks")),
-      sourceUrl = payload.optStringOrNull("sourceUrl")
+      sourceUrl = payload.optStringOrNull("sourceUrl"),
+      navigationContext = payload.optJSONObject("navigationContext")?.copy()
     )
   }
 
@@ -91,6 +93,7 @@ object NativePlaybackContracts {
 
     val settingsJson = parseObject(intent.getStringExtra(PlaybackBridge.EXTRA_SETTINGS_JSON))
     val tracksJson = parseObject(intent.getStringExtra(PlaybackBridge.EXTRA_TRACKS_JSON))
+    val navigationContextJson = parseObject(intent.getStringExtra(PlaybackBridge.EXTRA_NAVIGATION_CONTEXT_JSON))
     val resumePositionMs = intent.getLongExtra(PlaybackBridge.EXTRA_RESUME_POSITION_MS, -1L).takeIf { it >= 0L }
     val positionMs = intent.getLongExtra(PlaybackBridge.EXTRA_POSITION_MS, 0L)
 
@@ -106,7 +109,8 @@ object NativePlaybackContracts {
       fallbackWebUrl = intent.getStringExtra(PlaybackBridge.EXTRA_FALLBACK_WEB_URL)?.ifBlank { null },
       settings = parseSettings(settingsJson),
       tracks = parseTracks(tracksJson),
-      sourceUrl = intent.getStringExtra(PlaybackBridge.EXTRA_SOURCE_URL)?.ifBlank { null }
+      sourceUrl = intent.getStringExtra(PlaybackBridge.EXTRA_SOURCE_URL)?.ifBlank { null },
+      navigationContext = navigationContextJson?.copy()
     )
   }
 
@@ -191,6 +195,10 @@ object NativePlaybackContracts {
     }
     return runCatching { JSONObject(value) }.getOrNull()
   }
+}
+
+private fun JSONObject.copy(): JSONObject {
+  return JSONObject(this.toString())
 }
 
 private fun JSONObject.optBooleanOrNull(key: String): Boolean? {

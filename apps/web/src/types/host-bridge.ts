@@ -47,6 +47,15 @@ export interface NativePlaybackTracks {
   selectedSubtitlesTrackId?: string | null;
 }
 
+export interface NavigationContext {
+  routeHash?: string;
+  zone?: "sidebar" | "topbar" | "content" | "overlay" | "unknown";
+  focusKey?: string;
+  scrollY?: number;
+  timestampMs?: number;
+  sessionId?: string;
+}
+
 export type HostEvent =
   | HostEnvelope<"lifecycle.changed", { state: "created" | "started" | "resumed" | "paused" | "stopped" | "destroyed" }>
   | HostEnvelope<"network.changed", { connected: boolean; transport?: "wifi" | "ethernet" | "cellular" | "unknown" }>
@@ -66,6 +75,8 @@ export type HostEvent =
         failureDomain?: "native_audio" | "network" | "decode" | "unsupported" | "host" | "unknown";
         failureDetail?: string;
         settingsDiagnostics?: JsonValue[];
+        exitReason?: "user_back" | "user_exit" | "end" | "error" | "background";
+        navigationContext?: JsonObject;
       }
     >;
 
@@ -84,6 +95,7 @@ export type HostCommand =
         fallbackWebUrl?: string;
         settings?: JsonObject;
         tracks?: JsonObject;
+        navigationContext?: JsonObject;
       }
     >
   | HostEnvelope<"playback.close", { reason?: "user" | "end" | "error" }>
