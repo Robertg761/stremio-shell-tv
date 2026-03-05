@@ -3,6 +3,7 @@ import { createHostEnvelope, type HostCommand, type HostEvent } from "./host-bri
 export const playbackOpenContractSample: HostCommand = createHostEnvelope("playback.open", {
   streamId: "stream-1",
   url: "https://cdn.example.com/video.m3u8",
+  sourceUrl: "https://127.0.0.1:11470/hlsv2/stream-1/index.m3u8",
   title: "Sample title",
   subtitle: "Sample subtitle",
   artworkUrl: "https://cdn.example.com/background.jpg",

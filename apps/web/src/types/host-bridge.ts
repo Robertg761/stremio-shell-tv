@@ -86,6 +86,7 @@ export type HostCommand =
       {
         streamId: string;
         url: string;
+        sourceUrl?: string;
         title?: string;
         subtitle?: string;
         positionMs?: number;

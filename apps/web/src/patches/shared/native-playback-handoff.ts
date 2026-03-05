@@ -4,6 +4,7 @@ import type { NavigationContext, NativePlaybackSettings, NativePlaybackTracks } 
 type NativePlaybackOpenPayload = {
   streamId?: string;
   url: string;
+  sourceUrl?: string;
   title?: string;
   subtitle?: string;
   positionMs?: number;
@@ -42,6 +43,7 @@ function dispatchNativePlayback(payload: NativePlaybackOpenPayload): void {
     createPlaybackOpenCommand({
       streamId,
       url: payload.url,
+      sourceUrl: payload.sourceUrl,
       title: payload.title,
       subtitle: payload.subtitle,
       positionMs: payload.positionMs,

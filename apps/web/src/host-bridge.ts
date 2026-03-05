@@ -74,6 +74,7 @@ export function createBackHandledCommand(
 type PlaybackOpenPayload = {
   streamId: string;
   url: string;
+  sourceUrl?: string;
   title?: string;
   subtitle?: string;
   positionMs?: number;
@@ -90,6 +91,7 @@ export function createPlaybackOpenCommand(payload: PlaybackOpenPayload): HostCom
   const normalizedPayload: {
     streamId: string;
     url: string;
+    sourceUrl?: string;
     title?: string;
     subtitle?: string;
     positionMs?: number;
@@ -103,6 +105,7 @@ export function createPlaybackOpenCommand(payload: PlaybackOpenPayload): HostCom
   } = {
     streamId: payload.streamId,
     url: payload.url,
+    sourceUrl: payload.sourceUrl,
     title: payload.title,
     subtitle: payload.subtitle,
     positionMs: payload.positionMs,

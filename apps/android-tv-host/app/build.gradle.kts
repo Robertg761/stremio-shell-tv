@@ -75,6 +75,7 @@ android {
     debug {
       buildConfigField("String", "WEB_APP_URL", "\"$debugWebAppUrl\"")
       buildConfigField("String", "WEB_REMOTE_FALLBACK_URL", "\"https://web.stremio.com/\"")
+      manifestPlaceholders["usesCleartextTraffic"] = "true"
     }
     release {
       isMinifyEnabled = false
@@ -87,6 +88,7 @@ android {
       }
       buildConfigField("String", "WEB_APP_URL", "\"\"")
       buildConfigField("String", "WEB_REMOTE_FALLBACK_URL", "\"https://web.stremio.com/\"")
+      manifestPlaceholders["usesCleartextTraffic"] = "false"
     }
   }
 

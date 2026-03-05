@@ -101,6 +101,7 @@ class MainActivity : AppCompatActivity() {
   private val apkUpdateManager = ApkUpdateManager()
   private var updateCheckInFlight = false
   private var promptedDownloadedVersion: String? = null
+  private var awaitingUnknownSourcesPermissionVersion: String? = null
   private var activeUpdateDialog: AlertDialog? = null
   private var updateReceiverRegistered = false
   private val startupTimeoutRunnable = Runnable {
@@ -145,6 +146,8 @@ class MainActivity : AppCompatActivity() {
         maybePromptForDownloadedUpdate(force = true)
       } else {
         appendDiagnostic("Update download failed id=$completedDownloadId reason=${result?.reason}.")
+        apkUpdateManager.clearDownloadedState(this@MainActivity, deleteApk = true)
+        resetUpdatePromptState()
         Toast.makeText(this@MainActivity, getString(R.string.update_download_failed), Toast.LENGTH_LONG).show()
       }
     }
@@ -207,6 +210,9 @@ class MainActivity : AppCompatActivity() {
     requestAudioFocus()
     applyWebMediaAudioGuard()
     appendAudioStateDiagnostic("onResume")
+    if (awaitingUnknownSourcesPermissionVersion != null && !apkUpdateManager.needsUnknownSourcesPermission(this)) {
+      maybePromptForDownloadedUpdate(force = true)
+    }
     maybePromptForDownloadedUpdate(force = false)
     emitLifecycle("resumed")
   }
@@ -267,8 +273,8 @@ class MainActivity : AppCompatActivity() {
       javaScriptEnabled = true
       domStorageEnabled = true
       mediaPlaybackRequiresUserGesture = false
-      allowFileAccess = true
-      mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+      allowFileAccess = false
+      mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
       if (BuildConfig.IS_TV) {
         val currentUserAgent = userAgentString.orEmpty()
         if (!currentUserAgent.contains("Android TV")) {
@@ -430,7 +436,7 @@ class MainActivity : AppCompatActivity() {
     val decision = AutoUpdatePolicy.decide(
       updateInfo = info,
       hasDownloadedForVersion = apkUpdateManager.hasDownloadedApkForVersion(this, info.latestVersionName),
-      hasActiveDownload = apkUpdateManager.getActiveDownloadId(this) != null
+      hasActiveDownload = apkUpdateManager.isDownloadInProgress(this)
     )
 
     when (decision) {
@@ -495,6 +501,7 @@ class MainActivity : AppCompatActivity() {
   private fun startUpdateDownload(info: UpdateInfo, showUserFeedback: Boolean = true) {
     runCatching {
       apkUpdateManager.clearDownloadedState(this, deleteApk = true)
+      resetUpdatePromptState()
       val downloadId = apkUpdateManager.startDownload(this, info)
       appendDiagnostic("Started update download id=$downloadId version=${info.latestVersionName}.")
       if (showUserFeedback) {
@@ -514,18 +521,22 @@ class MainActivity : AppCompatActivity() {
 
   private fun maybePromptForDownloadedUpdate(force: Boolean) {
     if (!apkUpdateManager.hasPendingDownloadedUpdate(this, BuildConfig.VERSION_NAME)) {
+      resetUpdatePromptState()
       return
     }
 
     val downloadedVersion = apkUpdateManager.getDownloadedVersionName(this) ?: return
-    if (!force && promptedDownloadedVersion == downloadedVersion) {
-      return
-    }
-    promptedDownloadedVersion = downloadedVersion
 
     if (apkUpdateManager.needsUnknownSourcesPermission(this)) {
+      awaitingUnknownSourcesPermissionVersion = downloadedVersion
       showEnableUnknownSourcesDialog(downloadedVersion)
     } else {
+      val shouldForcePrompt = force || awaitingUnknownSourcesPermissionVersion == downloadedVersion
+      awaitingUnknownSourcesPermissionVersion = null
+      if (!shouldForcePrompt && promptedDownloadedVersion == downloadedVersion) {
+        return
+      }
+      promptedDownloadedVersion = downloadedVersion
       showInstallDownloadedUpdateDialog(downloadedVersion)
     }
   }
@@ -593,6 +604,12 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun requestBackHandling(source: String) {
+    if (!webReady) {
+      appendDiagnostic("Back request received before web ready; applying native fallback immediately.")
+      applyNativeBackFallback(reason = "web_not_ready", requestId = null)
+      return
+    }
+
     val existing = backHandshakeController.pendingRequestId()
     if (existing != null) {
       appendDiagnostic("Back request ignored because pending request still active id=$existing")
@@ -707,20 +724,14 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun loadShell() {
-    startupCompleted = false
-    webReady = false
-    showStartupLoading(
-      getString(R.string.startup_loading_title),
-      getString(R.string.startup_loading_message)
-    )
-    startStartupWatchdog()
-
     if (BuildConfig.DEBUG && BuildConfig.WEB_APP_URL.isNotBlank()) {
       usingLocalDebugServer = isLocalDebugUrl(BuildConfig.WEB_APP_URL)
-      appendDiagnostic("Loading debug web shell from ${BuildConfig.WEB_APP_URL}")
-      shellSource = if (usingLocalDebugServer) "debug" else "remote"
-      webView.loadUrl(BuildConfig.WEB_APP_URL)
-      requestWebViewFocusIfTv()
+      val source = if (usingLocalDebugServer) "debug" else "remote"
+      loadShellUrl(
+        source = source,
+        url = BuildConfig.WEB_APP_URL,
+        diagnostic = "Loading debug web shell from ${BuildConfig.WEB_APP_URL}"
+      )
       return
     }
 
@@ -729,11 +740,12 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun loadLocalShell() {
-    appendDiagnostic("Loading bundled web shell from assets.")
-    shellSource = "bundled"
-    webReady = false
-    webView.loadUrl(localShellUrl)
-    requestWebViewFocusIfTv()
+    usingLocalDebugServer = false
+    loadShellUrl(
+      source = "bundled",
+      url = localShellUrl,
+      diagnostic = "Loading bundled web shell from assets."
+    )
   }
 
   private fun loadRemoteFallback(reason: String) {
@@ -747,12 +759,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     attemptedRemoteFallback = true
-    shellSource = "remote"
-    webReady = false
-    appendDiagnostic("Loading remote fallback shell due to $reason -> $fallbackUrl")
-    Toast.makeText(this, "Local shell unavailable, loading fallback.", Toast.LENGTH_SHORT).show()
-    webView.loadUrl(fallbackUrl)
-    requestWebViewFocusIfTv()
+    usingLocalDebugServer = false
+    loadShellUrl(
+      source = "remote",
+      url = fallbackUrl,
+      diagnostic = "Loading remote fallback shell due to $reason -> $fallbackUrl",
+      toastMessage = "Local shell unavailable, loading fallback."
+    )
   }
 
   private fun handleDeepLink(intent: Intent?) {
@@ -769,6 +782,11 @@ class MainActivity : AppCompatActivity() {
     runOnUiThread {
       HostBridgeContract.parseCommand(commandJson).fold(
         onSuccess = { envelope ->
+          if (!isCommandAllowedForCurrentShell(envelope.type)) {
+            appendDiagnostic("Blocked command ${envelope.type} while source=$shellSource.")
+            return@fold
+          }
+
           appendDiagnostic("Received host command: ${envelope.type}")
           when (envelope.type) {
             "playback.open" -> {
@@ -918,8 +936,16 @@ class MainActivity : AppCompatActivity() {
       return
     }
 
+    val parsed = runCatching { Uri.parse(url) }.getOrNull()
+    val scheme = parsed?.scheme?.lowercase(Locale.US)
+    if (scheme !in setOf("https", "http")) {
+      appendDiagnostic("external.openUrl blocked due to unsupported scheme: ${scheme ?: "none"}")
+      return
+    }
+    val safeUri = parsed ?: return
+
     runCatching {
-      startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+      startActivity(Intent(Intent.ACTION_VIEW, safeUri))
     }.onFailure {
       appendDiagnostic("Failed to open external URL: ${it.message}")
     }
@@ -1085,7 +1111,11 @@ class MainActivity : AppCompatActivity() {
 
   private fun emitHostEventJson(eventJson: String) {
     if (!webReady) {
-      pendingEvents += eventJson
+      if (isQueueablePendingEvent(eventJson)) {
+        pendingEvents += eventJson
+      } else {
+        appendDiagnostic("Dropping non-queueable host event while web not ready.")
+      }
       return
     }
     dispatchToWeb(eventJson)
@@ -1095,8 +1125,49 @@ class MainActivity : AppCompatActivity() {
     if (!webReady || pendingEvents.isEmpty()) {
       return
     }
-    pendingEvents.forEach(::dispatchToWeb)
+    val queueable = pendingEvents.filter(::isQueueablePendingEvent)
+    val dropped = pendingEvents.size - queueable.size
+    if (dropped > 0) {
+      appendDiagnostic("Dropped $dropped stale non-queueable host event(s) before flush.")
+    }
+    queueable.forEach(::dispatchToWeb)
     pendingEvents.clear()
+  }
+
+  private fun loadShellUrl(
+    source: String,
+    url: String,
+    diagnostic: String,
+    toastMessage: String? = null
+  ) {
+    startupCompleted = false
+    webReady = false
+    shellSource = source
+    showStartupLoading(
+      getString(R.string.startup_loading_title),
+      getString(R.string.startup_loading_message)
+    )
+    startStartupWatchdog()
+    appendDiagnostic(diagnostic)
+    if (!toastMessage.isNullOrBlank()) {
+      Toast.makeText(this, toastMessage, Toast.LENGTH_SHORT).show()
+    }
+    webView.loadUrl(url)
+    requestWebViewFocusIfTv()
+  }
+
+  private fun isCommandAllowedForCurrentShell(commandType: String): Boolean {
+    return HostCommandPolicy.isAllowed(commandType, shellSource, usingLocalDebugServer)
+  }
+
+  private fun isQueueablePendingEvent(eventJson: String): Boolean {
+    val type = runCatching { JSONObject(eventJson).optString("type") }.getOrNull().orEmpty()
+    return HostEventQueuePolicy.shouldQueue(type)
+  }
+
+  private fun resetUpdatePromptState() {
+    promptedDownloadedVersion = null
+    awaitingUnknownSourcesPermissionVersion = null
   }
 
   private fun dispatchToWeb(eventJson: String) {

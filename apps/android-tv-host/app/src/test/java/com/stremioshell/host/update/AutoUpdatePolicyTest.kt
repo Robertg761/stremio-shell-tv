@@ -53,4 +53,26 @@ class AutoUpdatePolicyTest {
 
     assertEquals(AutoUpdatePolicy.Decision.START_DOWNLOAD, decision)
   }
+
+  @Test
+  fun `returns start download when stale failed download id is cleared before policy`() {
+    val decision = AutoUpdatePolicy.decide(
+      updateInfo = sampleUpdate,
+      hasDownloadedForVersion = false,
+      hasActiveDownload = false
+    )
+
+    assertEquals(AutoUpdatePolicy.Decision.START_DOWNLOAD, decision)
+  }
+
+  @Test
+  fun `returns start download when cancelled download id is cleared before policy`() {
+    val decision = AutoUpdatePolicy.decide(
+      updateInfo = sampleUpdate,
+      hasDownloadedForVersion = false,
+      hasActiveDownload = false
+    )
+
+    assertEquals(AutoUpdatePolicy.Decision.START_DOWNLOAD, decision)
+  }
 }

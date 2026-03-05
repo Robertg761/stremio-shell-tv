@@ -7,7 +7,8 @@ import {
   isContractEnvelope,
   isCoreStateQuery,
   isCoreStateSnapshot,
-  isJsonObject
+  isJsonObject,
+  isJsonValue
 } from "../dist/types.js";
 
 test("createEnvelope uses v1 contract shape", () => {
@@ -55,4 +56,11 @@ test("isJsonObject rejects arrays and non-object values", () => {
   assert.equal(isJsonObject(["array"]), false);
   assert.equal(isJsonObject("text"), false);
   assert.equal(isJsonObject(null), false);
+});
+
+test("isJsonValue rejects non-finite numbers", () => {
+  assert.equal(isJsonValue(NaN), false);
+  assert.equal(isJsonValue(Infinity), false);
+  assert.equal(isJsonValue(-Infinity), false);
+  assert.equal(isJsonValue(42), true);
 });

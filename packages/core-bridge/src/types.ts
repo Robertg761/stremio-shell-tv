@@ -85,8 +85,11 @@ export function isJsonValue(value: unknown): value is JsonValue {
   }
 
   const type = typeof value;
-  if (type === "string" || type === "number" || type === "boolean") {
+  if (type === "string" || type === "boolean") {
     return true;
+  }
+  if (type === "number") {
+    return Number.isFinite(value);
   }
 
   if (Array.isArray(value)) {

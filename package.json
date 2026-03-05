@@ -15,7 +15,7 @@
     "android:web-build": "pnpm --filter @stremio-shell/web build",
     "android:tv:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleTvDebug\"",
     "android:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleTvDebug\"",
-    "core:use-npm": "pnpm --filter @stremio-shell/core-bridge add @stremio/stremio-core-web@latest",
+    "core:use-npm": "pnpm --filter @stremio-shell/core-bridge add @stremio/stremio-core-web@0.52.0",
     "core:use-local": "powershell -ExecutionPolicy Bypass -File scripts/use-local-core.ps1"
   },
   "devDependencies": {

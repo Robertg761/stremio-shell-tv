@@ -91,6 +91,34 @@ class ApkUpdateManager(
     return downloadId.takeIf { it > 0L }
   }
 
+  fun isDownloadInProgress(context: Context): Boolean {
+    val downloadId = getActiveDownloadId(context) ?: return false
+    val query = queryDownload(context)
+    if (query == null) {
+      clearDownloadedState(context, deleteApk = false)
+      return false
+    }
+
+    return when (query.status) {
+      DownloadManager.STATUS_PENDING,
+      DownloadManager.STATUS_RUNNING,
+      DownloadManager.STATUS_PAUSED -> true
+      DownloadManager.STATUS_FAILED -> {
+        clearDownloadedState(context, deleteApk = true)
+        false
+      }
+      DownloadManager.STATUS_SUCCESSFUL -> false
+      else -> {
+        runCatching {
+          val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+          dm.remove(downloadId)
+        }
+        clearDownloadedState(context, deleteApk = false)
+        false
+      }
+    }
+  }
+
   fun hasDownloadedApk(context: Context): Boolean {
     val apkFile = getDownloadedApkFile(context) ?: return false
     val query = queryDownload(context) ?: return false

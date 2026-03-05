@@ -13,7 +13,7 @@ import {
   type JsonObject,
   type JsonValue,
   type TelemetryEvent
-} from "./types";
+} from "./types.js";
 
 export type {
   ContractEnvelope,
@@ -24,7 +24,7 @@ export type {
   JsonObject,
   JsonValue,
   TelemetryEvent
-} from "./types";
+} from "./types.js";
 
 export class CoreBridgeContractError extends Error {
   constructor(message: string) {
@@ -49,7 +49,11 @@ type CoreWebModule = {
   decode_stream: (stream: unknown) => unknown;
 };
 
+type CoreModuleLoader = () => Promise<Record<string, unknown>>;
+
 let coreModule: CoreWebModule | null = null;
+const defaultCoreModuleLoader: CoreModuleLoader = async () => (await import("@stremio/stremio-core-web")) as Record<string, unknown>;
+let coreModuleLoader: CoreModuleLoader = defaultCoreModuleLoader;
 
 function requireLocationHash(locationHash: unknown): string {
   if (locationHash === undefined) {
@@ -79,9 +83,52 @@ function requireEnvelope(value: unknown, label: string): void {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isEnvelopeLike(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    "type" in value &&
+    "version" in value &&
+    "payload" in value &&
+    "timestampMs" in value
+  );
+}
+
+function isStateSnapshotLike(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    "scope" in value &&
+    "version" in value &&
+    "updatedAtMs" in value &&
+    "data" in value
+  );
+}
+
+function requireCoreFunction<T>(
+  imported: Record<string, unknown>,
+  exportName: keyof CoreWebModule
+): T {
+  const candidate = imported[exportName];
+  if (typeof candidate !== "function") {
+    throw new CoreBridgeContractError(`@stremio/stremio-core-web export "${exportName}" must be a function.`);
+  }
+  return candidate as T;
+}
+
 function normalizeCoreEvent(event: unknown): CoreEvent {
   if (isContractEnvelope(event)) {
     return event as CoreEvent;
+  }
+
+  if (isEnvelopeLike(event)) {
+    throw new CoreBridgeContractError("Runtime event resembles a contract envelope but failed validation.");
   }
 
   const payload = isJsonObject(event) ? { rawEvent: event } : { rawEvent: normalizeJsonValue(event) };
@@ -91,6 +138,10 @@ function normalizeCoreEvent(event: unknown): CoreEvent {
 function normalizeStateSnapshot(query: CoreStateQuery, state: unknown): CoreStateSnapshot {
   if (isCoreStateSnapshot(state)) {
     return state;
+  }
+
+  if (isStateSnapshotLike(state)) {
+    throw new CoreBridgeContractError("getState result resembles a CoreStateSnapshot but failed validation.");
   }
 
   return {
@@ -106,14 +157,14 @@ async function loadCoreModule(): Promise<CoreWebModule> {
     return coreModule;
   }
 
-  const imported = (await import("@stremio/stremio-core-web")) as Record<string, unknown>;
+  const imported = await coreModuleLoader();
 
   coreModule = {
-    initialize_runtime: imported.initialize_runtime as CoreWebModule["initialize_runtime"],
-    dispatch: imported.dispatch as CoreWebModule["dispatch"],
-    get_state: imported.get_state as CoreWebModule["get_state"],
-    analytics: imported.analytics as CoreWebModule["analytics"],
-    decode_stream: imported.decode_stream as CoreWebModule["decode_stream"]
+    initialize_runtime: requireCoreFunction<CoreWebModule["initialize_runtime"]>(imported, "initialize_runtime"),
+    dispatch: requireCoreFunction<CoreWebModule["dispatch"]>(imported, "dispatch"),
+    get_state: requireCoreFunction<CoreWebModule["get_state"]>(imported, "get_state"),
+    analytics: requireCoreFunction<CoreWebModule["analytics"]>(imported, "analytics"),
+    decode_stream: requireCoreFunction<CoreWebModule["decode_stream"]>(imported, "decode_stream")
   };
 
   return coreModule;
@@ -156,4 +207,14 @@ export async function createCoreBridge(): Promise<CoreBridge> {
       return normalizeJsonValue(decoded);
     }
   };
+}
+
+export function __setCoreModuleLoaderForTests(loader: CoreModuleLoader): void {
+  coreModuleLoader = loader;
+  coreModule = null;
+}
+
+export function __resetCoreModuleLoaderForTests(): void {
+  coreModuleLoader = defaultCoreModuleLoader;
+  coreModule = null;
 }
