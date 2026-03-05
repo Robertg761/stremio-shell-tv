@@ -30,7 +30,7 @@ async function main() {
   await run("node", ["./scripts/upstream-web.mjs", "prepare"], webRoot);
   await run(
     "pnpm",
-    ["--ignore-workspace", "exec", "jest", "src/common/Shortcuts/__tests__/tvHostEvents.test.js", "--runInBand"],
+    ["--ignore-workspace", "exec", "jest", "src/common/Shortcuts/__tests__", "--runInBand"],
     stageRoot
   );
 }

@@ -3,6 +3,8 @@ const {
     createBackHandledEnvelope,
     getRouteFocusSelectors,
     normalizeDeepLinkToHash,
+    setBoundedRouteSnapshot,
+    shouldHandleDirectionalKey,
 } = require('../tvHostEvents');
 
 describe('tvHostEvents', () => {
@@ -57,5 +59,33 @@ describe('tvHostEvents', () => {
     test('meta details stream selectors include stream controls', () => {
         const selectors = getRouteFocusSelectors('#/meta-details/tt100/streams');
         expect(selectors.some((selector) => selector.includes('stream-container'))).toBe(true);
+    });
+
+    test('directional key handling excludes player routes', () => {
+        expect(shouldHandleDirectionalKey({
+            hasDirection: true,
+            isEditableTarget: false,
+            shouldHandleArrowNavigation: true,
+            routeHash: '#/board',
+        })).toBe(true);
+
+        expect(shouldHandleDirectionalKey({
+            hasDirection: true,
+            isEditableTarget: false,
+            shouldHandleArrowNavigation: true,
+            routeHash: '#/player/test',
+        })).toBe(false);
+    });
+
+    test('bounded route snapshot cache evicts oldest entries', () => {
+        const snapshots = new Map();
+        setBoundedRouteSnapshot(snapshots, '#/board', { id: 1 }, 2);
+        setBoundedRouteSnapshot(snapshots, '#/discover', { id: 2 }, 2);
+        setBoundedRouteSnapshot(snapshots, '#/settings', { id: 3 }, 2);
+
+        expect(snapshots.size).toBe(2);
+        expect(snapshots.has('#/board')).toBe(false);
+        expect(snapshots.has('#/discover')).toBe(true);
+        expect(snapshots.has('#/settings')).toBe(true);
     });
 });

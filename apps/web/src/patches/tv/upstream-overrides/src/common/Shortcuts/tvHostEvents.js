@@ -1,4 +1,5 @@
 const HOST_COMMAND_VERSION = 1;
+const DEFAULT_ROUTE_SNAPSHOT_LIMIT = 100;
 
 const ROUTE_FOCUS_SELECTORS = {
     board: [
@@ -101,6 +102,46 @@ const getRouteFocusSelectors = (hash = '') => {
     return ROUTE_FOCUS_SELECTORS[route] || ROUTE_FOCUS_SELECTORS.default;
 };
 
+const shouldHandleDirectionalKey = ({
+    hasDirection = false,
+    isEditableTarget = false,
+    shouldHandleArrowNavigation = false,
+    routeHash = '',
+} = {}) => {
+    return Boolean(
+        hasDirection &&
+        !isEditableTarget &&
+        shouldHandleArrowNavigation &&
+        classifyRoute(routeHash) !== 'player'
+    );
+};
+
+const setBoundedRouteSnapshot = (snapshotMap, routeHash, snapshot, limit = DEFAULT_ROUTE_SNAPSHOT_LIMIT) => {
+    if (!(snapshotMap instanceof Map)) {
+        return;
+    }
+    if (typeof routeHash !== 'string' || !routeHash) {
+        return;
+    }
+    if (!snapshot || typeof snapshot !== 'object') {
+        return;
+    }
+
+    if (snapshotMap.has(routeHash)) {
+        snapshotMap.delete(routeHash);
+    }
+    snapshotMap.set(routeHash, snapshot);
+
+    const maxEntries = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : DEFAULT_ROUTE_SNAPSHOT_LIMIT;
+    while (snapshotMap.size > maxEntries) {
+        const oldestKey = snapshotMap.keys().next().value;
+        if (typeof oldestKey !== 'string') {
+            break;
+        }
+        snapshotMap.delete(oldestKey);
+    }
+};
+
 const normalizeDeepLinkToHash = (rawUrl) => {
     if (typeof rawUrl !== 'string') {
         return null;
@@ -178,5 +219,7 @@ module.exports = {
     classifyRoute,
     createBackHandledEnvelope,
     getRouteFocusSelectors,
-    normalizeDeepLinkToHash
+    normalizeDeepLinkToHash,
+    setBoundedRouteSnapshot,
+    shouldHandleDirectionalKey,
 };

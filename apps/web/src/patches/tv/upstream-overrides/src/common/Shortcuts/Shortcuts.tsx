@@ -5,6 +5,8 @@ import {
     createBackHandledEnvelope,
     getRouteFocusSelectors,
     normalizeDeepLinkToHash,
+    setBoundedRouteSnapshot,
+    shouldHandleDirectionalKey,
 } from './tvHostEvents';
 import {
     DEFAULT_FOCUSABLE_SELECTORS as PROFILE_DEFAULT_FOCUSABLE_SELECTORS,
@@ -31,6 +33,7 @@ const TV_NAV_V2_QUERY_KEY = 'tv_nav_v2';
 const OVERLAY_CLOSE_SETTLE_MS = 60;
 const HOST_KEY_DEDUP_MS = 150;
 const DIAGNOSTIC_LIMIT = 240;
+const ROUTE_FOCUS_SNAPSHOT_LIMIT = 100;
 
 type Direction = NavigationDirection;
 
@@ -333,7 +336,7 @@ const captureCurrentFocusSnapshot = (source: string) => {
     }
 
     lastFocusSnapshot = snapshot;
-    routeFocusSnapshots.set(routeHash, snapshot);
+    setBoundedRouteSnapshot(routeFocusSnapshots, routeHash, snapshot, ROUTE_FOCUS_SNAPSHOT_LIMIT);
     applyActiveZone(zone);
     publishNavigationContext(snapshot);
     recordTvDiagnostic('focus.snapshot', { source, element: getElementDebugLabel(activeElement) }, zone);
@@ -1065,18 +1068,23 @@ const ShortcutsProvider = ({ children, onShortcut }: Props) => {
         const direction = ARROW_KEY_TO_DIRECTION[event.key];
         const editableTarget = isEditableTarget(event.target);
 
-        if (direction && !editableTarget && shouldHandleArrowNavigation) {
+        if (shouldHandleDirectionalKey({
+            hasDirection: Boolean(direction),
+            isEditableTarget: editableTarget,
+            shouldHandleArrowNavigation,
+            routeHash: getCurrentRouteHash(),
+        })) {
             event.preventDefault();
 
             if (Date.now() - lastHostKeyProcessedAt < HOST_KEY_DEDUP_MS) {
                 return;
             }
 
-            if (!isPlayerRoute()) {
-                if (!hasRealFocusedElement()) {
-                    focusRouteEntryPoint('keydown_recovery');
-                }
+            if (!hasRealFocusedElement()) {
+                focusRouteEntryPoint('keydown_recovery');
+            }
 
+            if (direction) {
                 const moved = navigateTvDirection(direction);
                 recordTvDiagnostic('keydown.navigate', { moved, navV2: isTvNavV2Enabled() }, undefined, direction);
             }
