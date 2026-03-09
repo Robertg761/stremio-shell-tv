@@ -35,26 +35,16 @@ android {
   compileSdk = 34
 
   defaultConfig {
-    applicationId = "com.stremioshell.host"
+    applicationId = "com.stremioshell.host.tv"
     minSdk = 26
     targetSdk = 34
     versionCode = 2
-    versionName = "0.1.1"
+    versionName = "0.1.1-tv"
+    resValue("string", "app_name", "Stremio Shell TV")
     buildConfigField("String", "GITHUB_RELEASE_OWNER", "\"$githubReleaseOwner\"")
     buildConfigField("String", "GITHUB_RELEASE_REPO", "\"$githubReleaseRepo\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-  }
-
-  flavorDimensions += "device"
-  productFlavors {
-    create("tv") {
-      dimension = "device"
-      applicationIdSuffix = ".tv"
-      versionNameSuffix = "-tv"
-      resValue("string", "app_name", "Stremio Shell TV")
-      buildConfigField("boolean", "IS_TV", "true")
-    }
   }
 
   if (ssHasSigning) {

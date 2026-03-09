@@ -13,8 +13,8 @@
     "test:tv-smoke": "pnpm --filter @stremio-shell/web test:tv-smoke",
     "upstream:sync": "powershell -ExecutionPolicy Bypass -File scripts/sync-upstream-stremio-web.ps1",
     "android:web-build": "pnpm --filter @stremio-shell/web build",
-    "android:tv:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleTvDebug\"",
-    "android:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleTvDebug\"",
+    "android:tv:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleDebug\"",
+    "android:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleDebug\"",
     "core:use-npm": "pnpm --filter @stremio-shell/core-bridge add @stremio/stremio-core-web@0.52.0",
     "core:use-local": "powershell -ExecutionPolicy Bypass -File scripts/use-local-core.ps1"
   },

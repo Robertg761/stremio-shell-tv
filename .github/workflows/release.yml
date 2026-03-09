@@ -120,7 +120,7 @@ jobs:
           set -euo pipefail
           cd apps/android-tv-host
           chmod +x ./gradlew
-          ./gradlew :app:assembleTvRelease
+          ./gradlew :app:assembleRelease
 
       - name: Prepare Dist
         if: steps.exists.outputs.skip != 'true'
@@ -131,9 +131,9 @@ jobs:
           VERSION="${{ steps.ver.outputs.version_name }}"
           mkdir -p dist
 
-          TV_APK="$(ls -1 apps/android-tv-host/app/build/outputs/apk/tv/release/*.apk | head -n 1)"
+          TV_APK="$(ls -1 apps/android-tv-host/app/build/outputs/apk/release/*.apk | head -n 1)"
           if [ -z "$TV_APK" ]; then
-            echo "Could not locate tv release APK output."
+            echo "Could not locate release APK output."
             exit 1
           fi
 
