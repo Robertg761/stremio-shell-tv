@@ -144,6 +144,7 @@ tasks.matching { task ->
   task.name.contains("LintVital", ignoreCase = true)
 }.configureEach {
   dependsOn(syncWebAssets)
+  dependsOn(syncCoreRuntimeAssets)
 }
 
 dependencies {
