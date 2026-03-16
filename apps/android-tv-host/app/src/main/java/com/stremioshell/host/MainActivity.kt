@@ -945,7 +945,11 @@ class MainActivity : AppCompatActivity() {
     val safeUri = parsed ?: return
 
     runCatching {
-      startActivity(Intent(Intent.ACTION_VIEW, safeUri))
+      val intent = Intent(Intent.ACTION_VIEW, safeUri).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      startActivity(intent)
     }.onFailure {
       appendDiagnostic("Failed to open external URL: ${it.message}")
     }
