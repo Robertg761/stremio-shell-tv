@@ -69,18 +69,18 @@ class BackgroundUpdateWorker(
     }
   }
 
-  private fun isRetryable(error: Throwable): Boolean {
-    if (error is UnknownHostException || error is SocketTimeoutException || error is IOException) {
-      return true
-    }
-
-    val message = error.message.orEmpty()
-    val statusCode = GITHUB_ERROR_REGEX.find(message)?.groupValues?.getOrNull(1)?.toIntOrNull()
-    return statusCode == 429 || (statusCode != null && statusCode in 500..599)
-  }
-
   companion object {
     private const val TAG = "StremioHostUpdateWorker"
     private val GITHUB_ERROR_REGEX = Regex("""GitHub API error (\d{3})""")
+
+    internal fun isRetryable(error: Throwable): Boolean {
+      if (error is UnknownHostException || error is SocketTimeoutException || error is IOException) {
+        return true
+      }
+
+      val message = error.message.orEmpty()
+      val statusCode = GITHUB_ERROR_REGEX.find(message)?.groupValues?.getOrNull(1)?.toIntOrNull()
+      return statusCode == 429 || (statusCode != null && statusCode in 500..599)
+    }
   }
 }
