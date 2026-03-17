@@ -1,4 +1,4 @@
-import type { TvZone } from './tvNavigationProfile';
+import { DEFAULT_FOCUSABLE_SELECTORS, type TvZone } from './tvNavigationProfile';
 
 export type TvFocusSnapshot = {
     routeHash: string,
@@ -43,19 +43,7 @@ type RestoreFocusSnapshotArgs = {
 
 const FOCUS_KEY_ATTR = 'data-stremio-tv-focus-key';
 const CONTAINER_KEY_ATTR = 'data-stremio-tv-container-key';
-const FOCUSABLE_SELECTOR = [
-    'a[href]',
-    'button',
-    '[role="button"]',
-    '[tabindex]:not([tabindex="-1"])',
-    'input',
-    'textarea',
-    'select',
-    '[class*="button-container"]',
-    '[class*="meta-item-container"]',
-    '[class*="stream-container"]',
-    '[class*="menu-option-container"]',
-].join(', ');
+const FOCUSABLE_SELECTOR = DEFAULT_FOCUSABLE_SELECTORS.join(', ');
 
 const CONTAINER_SELECTOR = [
     '[role="list"]',
