@@ -498,8 +498,8 @@ const resolveCurrentCandidate = (
         return activeElement;
     }
 
-    for (const selector of selectors) {
-        const closest = activeElement.closest<HTMLElement>(selector);
+    if (selectors.length > 0) {
+        const closest = activeElement.closest<HTMLElement>(selectors.join(','));
         if (closest && candidates.includes(closest)) {
             return closest;
         }
