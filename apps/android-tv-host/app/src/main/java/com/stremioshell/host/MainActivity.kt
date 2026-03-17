@@ -301,7 +301,7 @@ class MainActivity : AppCompatActivity() {
       }
 
       override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-        interceptStreamingServerRequest(request.url)?.let { return it }
+        interceptStreamingServerRequest(request)?.let { return it }
         return assetLoader.shouldInterceptRequest(request.url)
       }
 
@@ -1257,52 +1257,83 @@ class MainActivity : AppCompatActivity() {
     return "$base$rawUrl"
   }
 
-  private fun interceptStreamingServerRequest(uri: Uri): WebResourceResponse? {
-    if (!isLocalStreamingServerRequest(uri)) {
+    private val allowedOrigins by lazy {
+    val origins = mutableSetOf(
+      "https://appassets.androidplatform.net",
+      "https://web.stremio.com"
+    )
+    if (BuildConfig.WEB_APP_URL.isNotBlank()) {
+      runCatching {
+        val uri = Uri.parse(BuildConfig.WEB_APP_URL)
+        origins.add("${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}")
+      }
+    }
+    runCatching {
+      val uri = Uri.parse(BuildConfig.WEB_REMOTE_FALLBACK_URL)
+      origins.add("${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}")
+    }
+    origins
+  }
+
+  private fun getAllowedOrigin(request: WebResourceRequest): String? {
+    val originHeader = request.requestHeaders?.entries?.firstOrNull { it.key.equals("Origin", ignoreCase = true) }?.value
+      ?: return null
+    return if (allowedOrigins.contains(originHeader)) originHeader else null
+  }
+
+  private fun interceptStreamingServerRequest(request: WebResourceRequest): WebResourceResponse? {
+    if (!isLocalStreamingServerRequest(request.url)) {
       return null
     }
 
-    val target = extractLocalStreamingTarget(uri)
+    val allowedOrigin = getAllowedOrigin(request)
+
+    val target = extractLocalStreamingTarget(request.url)
     if (target != null) {
-      if (maybeOpenNativePlaybackFromStreamingServer(target.streamId, target.mediaUrl, uri.toString())) {
+      if (maybeOpenNativePlaybackFromStreamingServer(target.streamId, target.mediaUrl, request.url.toString())) {
         // Return a tiny valid manifest response so WebView does not hard-fail while native playback opens.
-        return createTextResponse("application/vnd.apple.mpegurl", "#EXTM3U\n")
+        return createTextResponse("application/vnd.apple.mpegurl", "#EXTM3U\n", allowedOrigin)
       }
       return null
     }
 
-    val path = uri.path.orEmpty()
+
+    if (request.method.equals("OPTIONS", ignoreCase = true)) {
+      return createTextResponse("text/plain", "", allowedOrigin)
+    }
+
+    val path = request.url.path.orEmpty()
     if (path == "/settings") {
       val body = JSONObject()
         .put("version", "android-host")
         .put("serverVersion", "android-host")
         .put("transcodeSupport", false)
         .put("remoteHttps", false)
-      return createTextResponse("application/json", body.toString())
+      return createTextResponse("application/json", body.toString(), allowedOrigin)
     }
 
     if (path == "/network-info") {
       val body = JSONObject()
         .put("connected", true)
         .put("transport", "internet")
-      return createTextResponse("application/json", body.toString())
+      return createTextResponse("application/json", body.toString(), allowedOrigin)
     }
 
     if (path == "/device-info") {
       val body = JSONObject()
         .put("platform", "android")
         .put("isTv", BuildConfig.IS_TV)
-      return createTextResponse("application/json", body.toString())
+      return createTextResponse("application/json", body.toString(), allowedOrigin)
     }
 
     if (path == "/casting") {
       val body = JSONObject()
         .put("available", false)
         .put("devices", org.json.JSONArray())
-      return createTextResponse("application/json", body.toString())
+      return createTextResponse("application/json", body.toString(), allowedOrigin)
     }
 
-    return createTextResponse("application/json", "{}")
+    return createTextResponse("application/json", "{}", allowedOrigin)
   }
 
   private data class StreamingTarget(
@@ -1399,18 +1430,22 @@ class MainActivity : AppCompatActivity() {
     return segments[1]
   }
 
-  private fun createTextResponse(contentType: String, body: String): WebResourceResponse {
+  private fun createTextResponse(contentType: String, body: String, allowedOrigin: String?): WebResourceResponse {
+    val headers = mutableMapOf(
+      "Cache-Control" to "no-store, no-cache, must-revalidate"
+    )
+    if (allowedOrigin != null) {
+      headers["Access-Control-Allow-Origin"] = allowedOrigin
+      headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+      headers["Access-Control-Allow-Headers"] = "*"
+    }
+
     return WebResourceResponse(
       contentType,
       "utf-8",
       200,
       "OK",
-      mapOf(
-        "Access-Control-Allow-Origin" to "*",
-        "Access-Control-Allow-Methods" to "GET, OPTIONS",
-        "Access-Control-Allow-Headers" to "*",
-        "Cache-Control" to "no-store, no-cache, must-revalidate"
-      ),
+      headers,
       ByteArrayInputStream(body.toByteArray(Charsets.UTF_8))
     )
   }
