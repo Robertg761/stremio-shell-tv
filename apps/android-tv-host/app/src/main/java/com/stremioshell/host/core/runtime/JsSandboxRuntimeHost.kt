@@ -755,11 +755,7 @@ class JsSandboxRuntimeHost(
                 : view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
             }
             if (value && typeof value.length === 'number') {
-              const length = Number(value.length) || 0;
-              const bytes = new Uint8Array(length);
-              for (let index = 0; index < length; index += 1) {
-                bytes[index] = Number(value[index]) & 0xff;
-              }
+              const bytes = new Uint8Array(value);
               return bytes.buffer;
             }
             throw new Error('Unsupported wasm buffer payload type');
