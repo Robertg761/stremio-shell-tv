@@ -112,6 +112,9 @@ jobs:
           arch: x86
           profile: tv_1080p
           emulator-boot-timeout: 900
+          # swiftshader_indirect segfaults in emulator 36.6.11 (gfxstream
+          # "cannot unmap ptr in protected range"); swangle renders fine.
+          emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
             cd apps/android-tv-host
