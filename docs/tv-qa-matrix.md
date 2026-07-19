@@ -56,6 +56,16 @@ release candidate is marked ready. Physical-device signoff still requires at
 least one Google TV class device and one non-Google Android TV/OEM device when
 available.
 
+Note: the CI instrumentation jobs are currently non-blocking because emulator
+36.6.11 on GitHub runner images crashes with every headless renderer. Until
+that is fixed upstream, run the instrumentation gate on a local TV emulator:
+
+```bash
+source scripts/android-env.sh
+emulator -avd stremio_tv_34 -no-window -no-audio -no-boot-anim -gpu host -no-snapshot &
+node scripts/run-gradle.mjs :app:connectedDebugAndroidTest
+```
+
 ## Artifact policy
 
 Attach screenshots, logcat captures, and APKs to CI runs, GitHub Releases, or an

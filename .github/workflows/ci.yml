@@ -75,6 +75,12 @@ jobs:
   android-tv-instrumentation:
     runs-on: ubuntu-latest
     needs: [validate]
+    # Emulator 36.6.11 on current runner images dumps core shortly after
+    # launch with every headless renderer (swiftshader_indirect, swangle,
+    # guest). Non-blocking until a fixed emulator ships in the runner image;
+    # the authoritative instrumentation gate is a local TV emulator run
+    # (see docs/tv-qa-matrix.md), which passes with -gpu host.
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
