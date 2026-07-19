@@ -38,6 +38,13 @@
       android:theme="@style/Theme.StremioShell.NoActionBar" />
 
     <activity
+      android:name=".tv.player.MpvPlayerActivity"
+      android:exported="false"
+      android:screenOrientation="landscape"
+      android:supportsPictureInPicture="false"
+      android:theme="@style/Theme.StremioShell.NoActionBar" />
+
+    <activity
       android:name=".MainActivity"
       android:exported="true"
       android:launchMode="singleTask"
