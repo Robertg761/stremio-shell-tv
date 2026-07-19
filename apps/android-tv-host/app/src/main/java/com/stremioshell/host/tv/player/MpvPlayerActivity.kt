@@ -41,6 +41,7 @@ import com.stremioshell.host.tv.ui.Screen
 import com.stremioshell.host.tv.ui.theme.StremioTvTheme
 import dev.jdtech.mpv.MPVLib
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 
 class MpvPlayerActivity : ComponentActivity() {
   private var mpvCreated = false
@@ -63,6 +64,7 @@ class MpvPlayerActivity : ComponentActivity() {
   private val timePosSec = mutableDoubleStateOf(0.0)
   private val durationSec = mutableDoubleStateOf(0.0)
   private val osdVisible = mutableStateOf(true)
+  private val trackInfo = mutableStateOf("")
   private var osdHideAtMs = 0L
 
   private val observer = object : MPVLib.EventObserver {
@@ -96,6 +98,7 @@ class MpvPlayerActivity : ComponentActivity() {
           if (resumeMs > 3_000) {
             MPVLib.setPropertyDouble("time-pos", resumeMs / 1000.0)
           }
+          refreshTrackInfo()
         }
       }
     }
@@ -169,10 +172,8 @@ class MpvPlayerActivity : ComponentActivity() {
       val showOsd by osdVisible
 
       if (isBuffering) {
-        Text(
-          "Buffering...",
-          style = MaterialTheme.typography.titleMedium,
-          color = Color.White,
+        androidx.compose.material3.CircularProgressIndicator(
+          color = MaterialTheme.colorScheme.primary,
           modifier = Modifier.align(Alignment.Center),
         )
       }
@@ -209,9 +210,16 @@ class MpvPlayerActivity : ComponentActivity() {
             }
             Text(formatTime(duration), color = Color.White, style = MaterialTheme.typography.bodyMedium)
           }
-          if (isPaused) {
-            Text("Paused", color = Color.White, style = MaterialTheme.typography.bodySmall)
+          val info = trackInfo.value
+          if (info.isNotBlank()) {
+            Text(info, color = Color(0xCCFFFFFF), style = MaterialTheme.typography.bodySmall)
           }
+          Text(
+            (if (isPaused) "Paused   -   " else "") +
+              "OK play/pause   |   LEFT/RIGHT 10s   |   UP/DOWN 60s   |   MENU subtitles",
+            color = Color(0x99FFFFFF),
+            style = MaterialTheme.typography.bodySmall,
+          )
         }
       }
     }
@@ -268,12 +276,48 @@ class MpvPlayerActivity : ComponentActivity() {
       KeyEvent.KEYCODE_DPAD_DOWN -> {
         MPVLib.command(arrayOf("seek", "-60")); showOsd(); return true
       }
+      KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_CAPTIONS -> {
+        MPVLib.command(arrayOf("cycle", "sub"))
+        refreshTrackInfo()
+        showOsd()
+        return true
+      }
+      KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK -> {
+        MPVLib.command(arrayOf("cycle", "audio"))
+        refreshTrackInfo()
+        showOsd()
+        return true
+      }
       KeyEvent.KEYCODE_BACK -> {
         finishPlayback(markFinished = false)
         return true
       }
     }
     return super.onKeyDown(keyCode, event)
+  }
+
+  /** Reads mpv's track list and selection into the OSD line, e.g. "Audio: English (TrueHD)  |  Subtitles: off". */
+  private fun refreshTrackInfo() {
+    if (!mpvCreated) return
+    runCatching {
+      val tracks = JSONArray(MPVLib.getPropertyString("track-list") ?: "[]")
+      var audio = "none"
+      var sub = "off"
+      for (i in 0 until tracks.length()) {
+        val track = tracks.getJSONObject(i)
+        if (!track.optBoolean("selected")) continue
+        val label = listOfNotNull(
+          track.optString("lang").takeIf { it.isNotBlank() },
+          track.optString("title").takeIf { it.isNotBlank() },
+          track.optString("codec").takeIf { it.isNotBlank() }?.uppercase(),
+        ).distinct().joinToString(" ").ifBlank { "track ${track.optInt("id")}" }
+        when (track.optString("type")) {
+          "audio" -> audio = label
+          "sub" -> sub = label
+        }
+      }
+      trackInfo.value = "Audio: $audio   |   Subtitles: $sub"
+    }
   }
 
   private fun showOsd() {

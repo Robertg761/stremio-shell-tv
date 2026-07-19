@@ -12,11 +12,15 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -25,18 +29,23 @@ import androidx.tv.material3.Text
 import com.stremioshell.host.tv.TvAppViewModel
 import com.stremioshell.host.tv.data.tmdb.MediaType
 
+@OptIn(FlowPreview::class)
 @Composable
 fun SearchScreen(viewModel: TvAppViewModel, onItemClick: (MediaType, Int) -> Unit) {
   val results by viewModel.searchResults.collectAsState()
   var query by rememberSaveable { mutableStateOf("") }
 
+  // Debounce keystrokes so we do not hit TMDB on every character.
+  LaunchedEffect(Unit) {
+    snapshotFlow { query }
+      .debounce(400)
+      .collect { viewModel.search(it) }
+  }
+
   Column(modifier = Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 24.dp)) {
     OutlinedTextField(
       value = query,
-      onValueChange = {
-        query = it
-        viewModel.search(it)
-      },
+      onValueChange = { query = it },
       singleLine = true,
       placeholder = { Text("Search movies and shows") },
       colors = OutlinedTextFieldDefaults.colors(

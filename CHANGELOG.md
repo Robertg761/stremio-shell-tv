@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1] - 2026-07-19
+- Focus lands on content when the app opens and when screens change - no more stranded focus in the nav rail.
+- New welcome screen on first run with a one-press path to Settings; Save now tests both connections and reports "TMDB: connected | Addon: connected (Comet)".
+- Continue Watching cards show a watched-progress bar; movie details show Resume with time remaining.
+- Player: buffering spinner, on-screen controls hint, current audio/subtitle track display, MENU cycles subtitles, and audio-track key cycles audio.
+- Loading spinners and Retry buttons on every network screen; search now waits for you to stop typing instead of querying per keystroke.
+
 ## [0.3.0] - 2026-07-19
 - New native Compose TV app is now the launcher: TMDB catalogs (trending/popular/search, details with seasons and episodes), Comet addon stream picker, and Continue Watching with resume — no Stremio account or services required.
 - Playback moved to libmpv: plays formats the device lacks hardware decoders for (HEVC 10-bit, TrueHD/DTS audio, ASS/PGS subtitles) via software decoding, with a TV OSD, D-pad/media-key controls, and resume positions.

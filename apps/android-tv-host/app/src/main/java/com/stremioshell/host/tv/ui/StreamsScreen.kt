@@ -51,7 +51,11 @@ fun StreamsScreen(
       modifier = Modifier.padding(bottom = 16.dp),
     )
 
-    LoadStateContent(streams, loadingText = "Asking the addon for streams...") { list ->
+    LoadStateContent(
+      streams,
+      loadingText = "Asking the addon for streams...",
+      onRetry = { viewModel.loadStreams(screen.imdbId, screen.season, screen.episode) },
+    ) { list ->
       if (list.isEmpty()) {
         CenteredMessage("The addon returned no playable streams for this title.")
       } else {

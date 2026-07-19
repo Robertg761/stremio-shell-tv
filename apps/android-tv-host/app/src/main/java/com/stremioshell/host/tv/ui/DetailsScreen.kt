@@ -49,7 +49,11 @@ fun DetailsScreen(
 
   LaunchedEffect(type, tmdbId) { viewModel.loadDetails(type, tmdbId) }
 
-  LoadStateContent(details, loadingText = "Loading details...") { media ->
+  LoadStateContent(
+    details,
+    loadingText = "Loading details...",
+    onRetry = { viewModel.loadDetails(type, tmdbId) },
+  ) { media ->
     var selectedSeason by rememberSaveable { mutableStateOf(media.seasons.firstOrNull()?.seasonNumber ?: 1) }
     val primaryFocus = androidx.compose.runtime.remember { FocusRequester() }
 
@@ -102,11 +106,20 @@ fun DetailsScreen(
                 style = MaterialTheme.typography.bodySmall,
               )
             } else if (media.item.type == MediaType.Movie) {
+              val continueWatching by viewModel.continueWatching.collectAsState()
+              val entry = continueWatching.firstOrNull { it.key == "movie:${media.item.tmdbId}" }
               Button(
                 onClick = { onPlay(media, null, null) },
                 modifier = Modifier.focusRequester(primaryFocus),
               ) {
-                Text("Find Streams")
+                Text(if (entry != null) "Resume" else "Find Streams")
+              }
+              if (entry != null && entry.durationMs > 0) {
+                val minsLeft = ((entry.durationMs - entry.positionMs) / 60000).coerceAtLeast(1)
+                Text(
+                  "$minsLeft min left - picks up where you stopped",
+                  style = MaterialTheme.typography.bodySmall,
+                )
               }
             }
           }

@@ -87,7 +87,7 @@ fun TvApp(streamLauncher: StreamLauncher = StreamLauncher { _, _ -> }) {
       ) {
         Box(modifier = Modifier.fillMaxSize()) {
           when (val screen = current) {
-            is Screen.Home -> HomeScreen(viewModel, onItemClick = openDetails, onResumeClick = openResume)
+            is Screen.Home -> HomeScreen(viewModel, onItemClick = openDetails, onResumeClick = openResume, onOpenSettings = { setRoot(Screen.Settings) })
             is Screen.Search -> SearchScreen(viewModel, onItemClick = openDetails)
             is Screen.Settings -> SettingsScreen(viewModel)
             is Screen.Details -> DetailsScreen(viewModel, screen.type, screen.tmdbId) { media, season, episode ->

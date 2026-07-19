@@ -132,11 +132,37 @@ class TvAppViewModel(application: Application) : AndroidViewModel(application) {
     }
   }
 
-  fun saveSettings(tmdbKey: String, addonUrl: String, onDone: () -> Unit) {
+  fun saveSettings(tmdbKey: String, addonUrl: String, onStatus: (String) -> Unit) {
     viewModelScope.launch {
       settings.setTmdbApiKey(tmdbKey)
       settings.setAddonManifestUrl(addonUrl)
-      onDone()
+      onStatus("Saved. Checking connections...")
+
+      val tmdbStatus = if (tmdbKey.isBlank()) {
+        "TMDB: no key"
+      } else {
+        runCatching { TmdbClient(tmdbKey).trending(MediaType.Movie) }
+          .fold(
+            onSuccess = { "TMDB: connected" },
+            onFailure = { "TMDB: failed (check the key)" },
+          )
+      }
+
+      val addonStatus = if (addonUrl.isBlank()) {
+        "Addon: no URL"
+      } else {
+        runCatching { addonClient.manifest(addonUrl) }
+          .fold(
+            onSuccess = { manifest ->
+              val name = manifest.name.ifBlank { "addon" }
+              "Addon: connected ($name)"
+            },
+            onFailure = { "Addon: failed (check the URL)" },
+          )
+      }
+
+      onStatus("$tmdbStatus   |   $addonStatus")
+      loadHomeRails(force = true)
     }
   }
 }

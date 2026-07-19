@@ -75,8 +75,7 @@ fun SettingsScreen(viewModel: TvAppViewModel) {
     )
 
     Button(onClick = {
-      viewModel.saveSettings(tmdbKey, addonUrl) { status = "Saved." }
-      viewModel.loadHomeRails(force = true)
+      viewModel.saveSettings(tmdbKey, addonUrl) { status = it }
     }) {
       Text("Save")
     }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,14 +80,34 @@ fun CenteredMessage(text: String) {
 }
 
 @Composable
+fun CenteredLoading(text: String) {
+  Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+      CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+      Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 14.dp))
+    }
+  }
+}
+
+@Composable
 fun <T> LoadStateContent(
   state: LoadState<T>,
   loadingText: String = "Loading...",
+  onRetry: (() -> Unit)? = null,
   content: @Composable (T) -> Unit,
 ) {
   when (state) {
-    is LoadState.Loading -> CenteredMessage(loadingText)
-    is LoadState.Failed -> CenteredMessage(state.message)
+    is LoadState.Loading -> CenteredLoading(loadingText)
+    is LoadState.Failed -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+      Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(state.message, style = MaterialTheme.typography.titleMedium)
+        if (onRetry != null) {
+          androidx.tv.material3.Button(onClick = onRetry, modifier = Modifier.padding(top = 16.dp)) {
+            Text("Retry")
+          }
+        }
+      }
+    }
     is LoadState.Ready -> content(state.value)
   }
 }
