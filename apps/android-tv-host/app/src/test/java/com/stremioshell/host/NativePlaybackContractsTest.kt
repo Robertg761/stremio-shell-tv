@@ -48,6 +48,32 @@ class NativePlaybackContractsTest {
   }
 
   @Test
+  fun `fromPayload returns null when url is blank`() {
+    val payload = JSONObject().put("streamId", "stream-123").put("url", "   ")
+    assertNull(NativePlaybackContracts.fromPayload(payload))
+  }
+
+  @Test
+  fun `fromPayload with minimal fields applies defaults`() {
+    val payload = JSONObject().put("streamId", "stream-123").put("url", "https://cdn.example.com/master.m3u8")
+    val request = NativePlaybackContracts.fromPayload(payload)
+    assertNotNull(request)
+    assertEquals("https://cdn.example.com/master.m3u8", request?.url)
+    assertEquals("stream-123", request?.streamId)
+    assertEquals(0L, request?.positionMs)
+    assertNull(request?.resumePositionMs)
+  }
+
+  @Test
+  fun `fromPayload bounds negative positions correctly`() {
+    val payload = JSONObject().put("streamId", "stream-123").put("url", "https://cdn.example.com/master.m3u8").put("positionMs", -100L).put("resumePositionMs", -200L)
+    val request = NativePlaybackContracts.fromPayload(payload)
+    assertNotNull(request)
+    assertEquals(0L, request?.positionMs)
+    assertNull(request?.resumePositionMs)
+  }
+
+  @Test
   fun `fromPayload returns null when url missing`() {
     val payload = JSONObject().put("streamId", "stream-123")
     assertNull(NativePlaybackContracts.fromPayload(payload))
