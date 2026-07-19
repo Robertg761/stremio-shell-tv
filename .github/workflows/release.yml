@@ -15,12 +15,12 @@ on:
         description: "Publish as GitHub prerelease"
         required: true
         type: boolean
-        default: true
+        default: false
       tag_suffix:
-        description: "Optional tag suffix (example: beta.1)"
+        description: "Optional tag suffix (example: beta.1) - leave empty for a stable release"
         required: false
         type: string
-        default: "beta.1"
+        default: ""
 
 permissions:
   contents: write
