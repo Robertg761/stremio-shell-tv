@@ -29,6 +29,14 @@
       android:exported="false"
       android:theme="@style/Theme.StremioShell.NoActionBar" />
 
+    <!-- Native Compose TV app; becomes the launcher target once it reaches
+         parity with the WebView shell for the Comet/Real-Debrid flow. -->
+    <activity
+      android:name=".tv.TvAppActivity"
+      android:exported="true"
+      android:launchMode="singleTask"
+      android:theme="@style/Theme.StremioShell.NoActionBar" />
+
     <activity
       android:name=".MainActivity"
       android:exported="true"
