@@ -44,7 +44,7 @@ Use `apps/android-tv-host/host-bridge-contract.json` as the source of truth for 
 Prerequisites:
 
 - Android SDK installed and `ANDROID_HOME` set.
-- JDK 17 installed.
+- JDK 17 installed and active (`java -version` should report 17).
 - Web shell built (`apps/web/dist`).
 
 Build steps:
@@ -68,3 +68,10 @@ Install to connected device/emulator:
 ## Flavor behavior
 
 - `tv` flavor has Leanback launcher category and TV banner.
+
+## Generated assets
+
+Gradle packages web and core runtime assets from
+`app/build/generated/assets/main`. The source path
+`app/src/main/assets/web` is ignored and should remain uncommitted so stale
+hashed web bundles do not accumulate in release APKs.

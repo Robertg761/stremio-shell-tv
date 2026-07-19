@@ -1,5 +1,5 @@
 import org.gradle.api.GradleException
-import org.gradle.api.tasks.Copy
+import org.gradle.api.tasks.Sync
 
 plugins {
   id("com.android.application")
@@ -29,6 +29,12 @@ val githubReleaseRepo = (project.findProperty("githubReleaseRepo") as String?)
   ?.trim()
   .orEmpty()
   .ifBlank { "stremio-shell-tv" }
+
+val webDistDir = rootDir.resolve("../web/dist")
+val coreRuntimeDistDir = rootDir.resolve("core-runtime-dist")
+val generatedMainAssetsDir = project.layout.buildDirectory.dir("generated/assets/main")
+val webAssetsDir = generatedMainAssetsDir.map { it.dir("web") }
+val coreRuntimeAssetsDir = generatedMainAssetsDir.map { it.dir("core-runtime") }
 
 android {
   namespace = "com.stremioshell.host"
@@ -104,14 +110,19 @@ android {
   buildFeatures {
     buildConfig = true
   }
+
+  sourceSets {
+    getByName("main") {
+      assets.srcDir(generatedMainAssetsDir)
+    }
+  }
 }
 
-val webDistDir = rootDir.resolve("../web/dist")
-val webAssetsDir = project.layout.projectDirectory.dir("src/main/assets/web")
-val coreRuntimeDistDir = rootDir.resolve("core-runtime-dist")
-val coreRuntimeAssetsDir = project.layout.projectDirectory.dir("src/main/assets/core-runtime")
+kotlin {
+  jvmToolchain(17)
+}
 
-val syncWebAssets by tasks.registering(Copy::class) {
+val syncWebAssets by tasks.registering(Sync::class) {
   group = "build setup"
   description = "Sync built web shell assets from apps/web/dist into Android assets."
 
@@ -127,7 +138,7 @@ val syncWebAssets by tasks.registering(Copy::class) {
   }
 }
 
-val syncCoreRuntimeAssets by tasks.registering(Copy::class) {
+val syncCoreRuntimeAssets by tasks.registering(Sync::class) {
   group = "build setup"
   description = "Sync bundled core runtime JS into Android assets."
 
@@ -154,6 +165,7 @@ tasks.matching { task ->
   task.name.contains("LintVital", ignoreCase = true)
 }.configureEach {
   dependsOn(syncWebAssets)
+  dependsOn(syncCoreRuntimeAssets)
 }
 
 dependencies {
