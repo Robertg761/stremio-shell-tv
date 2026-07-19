@@ -8,8 +8,15 @@ Each milestone must pass all listed gates before the next milestone starts. A ga
 
 - CI health:
   - `pnpm typecheck` passes.
+  - `pnpm lint` passes.
   - `pnpm build` passes.
   - `pnpm test:contracts` passes.
+  - Android JVM tests pass with JDK 17:
+    - `cd apps/android-tv-host && ./gradlew :app:testTvDebugUnitTest`
+- Generated build outputs and QA captures are not committed:
+  - `apps/android-tv-host/app/src/main/assets/web/`
+  - `artifacts/`
+  - release/debug APKs
 - No open P0 issues.
 - Documentation updated for any contract or behavior changes.
 
@@ -29,7 +36,9 @@ Each milestone must pass all listed gates before the next milestone starts. A ga
 - Host lifecycle/network events are visible in web event stream.
 - TV smoke checks pass:
   - `pnpm test:tv-smoke`
+  - Android JVM test suite (`:app:testTvDebugUnitTest`)
   - Android instrumentation smoke suite (`:app:connectedTvDebugAndroidTest` in CI/device lab)
+  - Manual matrix in `docs/tv-qa-matrix.md`
 
 ## Milestone 2 gates
 
@@ -58,6 +67,7 @@ Each milestone must pass all listed gates before the next milestone starts. A ga
 ## Milestone 5 gates
 
 - Signed internal build distributed to test cohort.
+- Release workflow verifies APK signatures before upload.
 - E2E smoke matrix pass rate >= 95%.
 - Crash-free session rate >= 98%.
 - All P1/P2 issues have owner + ETA.

@@ -20,6 +20,9 @@ Open the web shell at `https://localhost:5173`.
 
 ## Android TV builds
 
+Android builds require JDK 17. The repo includes `.java-version` for version
+managers that support it; verify `java -version` before invoking Gradle.
+
 Set Android SDK/AVD paths to `G:` (current shell session):
 
 ```powershell
@@ -40,6 +43,10 @@ pnpm android:tv:assemble
 Install artifact:
 
 - `apps/android-tv-host\app\build\outputs\apk\tv\debug\app-tv-debug.apk`
+
+The Android build packages generated web assets from
+`apps/android-tv-host/app/build/generated/assets/main/web`. Do not commit
+generated files under `apps/android-tv-host/app/src/main/assets/web`.
 
 ## GitHub release updates
 
@@ -69,7 +76,13 @@ Before pushing a release:
 1. Bump `versionCode` and `versionName` in `apps/android-tv-host/app/build.gradle.kts`.
 2. Add a matching version section in `CHANGELOG.md`:
    - `## [x.y.z] - YYYY-MM-DD`
-3. Push to `main` (or run workflow manually).
+3. Confirm release signing secrets are configured:
+   - `SS_SIGNING_STORE_BASE64`
+   - `SS_SIGNING_STORE_PASSWORD`
+   - `SS_SIGNING_KEY_ALIAS`
+   - `SS_SIGNING_KEY_PASSWORD`
+   - optional `SS_SIGNING_STORE_TYPE`
+4. Push to `main` (or run workflow manually).
 
 ## Upstream stremio-web sync
 

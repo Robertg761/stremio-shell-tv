@@ -36,12 +36,40 @@
    - back decision records
    - focus recovery logs
 
+## Automated checks
+
+Run before manual device signoff:
+
+```bash
+pnpm typecheck
+pnpm lint
+pnpm build
+pnpm test:contracts
+pnpm test:tv-smoke
+cd apps/android-tv-host
+./gradlew :app:testTvDebugUnitTest
+./gradlew :app:connectedTvDebugAndroidTest
+```
+
+The instrumentation matrix must include API 26 and API 34 TV emulators before a
+release candidate is marked ready. Physical-device signoff still requires at
+least one Google TV class device and one non-Google Android TV/OEM device when
+available.
+
+## Artifact policy
+
+Attach screenshots, logcat captures, and APKs to CI runs, GitHub Releases, or an
+external QA storage location. Do not commit generated QA artifacts under
+`artifacts/`, generated Android web assets, or release APK files.
+
 ## Signoff template
 
 - Build SHA:
 - Device:
+- Android API level:
 - Remote profile:
 - Result: PASS / FAIL
 - Defects:
+- Artifact location:
 - Tester:
 - Date:

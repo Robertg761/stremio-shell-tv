@@ -44,3 +44,8 @@ powershell -ExecutionPolicy Bypass -File scripts/sync-upstream-stremio-web.ps1 `
   - `apps/web/src/patches/shared/upstream-overrides`
   - `apps/web/src/patches/tv/upstream-overrides`
 - Staged output is built with upstream webpack, then copied to `apps/web/dist`.
+- Android packages web assets from generated Gradle assets under
+  `apps/android-tv-host/app/build/generated/assets/main/web`.
+- Do not commit generated Android web assets under
+  `apps/android-tv-host/app/src/main/assets/web`; that path is ignored to avoid
+  stale hashed bundles and oversized APK inputs.
