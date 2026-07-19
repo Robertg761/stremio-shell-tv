@@ -49,20 +49,26 @@ Prerequisites:
 
 Build steps:
 
-```powershell
+```bash
+# 0) Set up JDK 17 / Android SDK paths (Linux/macOS)
+source scripts/android-env.sh
+
 # 1) Build web assets used by Android release/debug fallback
 pnpm --filter @stremio-shell/web build
 
 # 2) Build Android TV variant
 cd apps/android-tv-host
-.\gradlew.bat :app:assembleTvDebug
-.\gradlew.bat :app:assembleTvDebug -PwebAppUrl=http://10.0.2.2:5173
+./gradlew :app:assembleTvDebug
+./gradlew :app:assembleTvDebug -PwebAppUrl=http://10.0.2.2:5173
 ```
+
+On Windows use `.\gradlew.bat` instead, or run `pnpm android:tv:assemble` from
+the repo root on any platform.
 
 Install to connected device/emulator:
 
-```powershell
-.\gradlew.bat :app:installTvDebug
+```bash
+./gradlew :app:installTvDebug
 ```
 
 ## Flavor behavior

@@ -11,12 +11,12 @@
     "lint": "turbo run lint",
     "test:contracts": "pnpm --filter @stremio-shell/core-bridge build && node --test \"packages/core-bridge/test/*.test.mjs\"",
     "test:tv-smoke": "pnpm --filter @stremio-shell/web test:tv-smoke",
-    "upstream:sync": "powershell -ExecutionPolicy Bypass -File scripts/sync-upstream-stremio-web.ps1",
+    "upstream:sync": "node scripts/sync-upstream-stremio-web.mjs",
     "android:web-build": "pnpm --filter @stremio-shell/web build",
-    "android:tv:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleTvDebug\"",
-    "android:assemble": "powershell -ExecutionPolicy Bypass -Command \"Set-Location 'apps/android-tv-host'; .\\gradlew.bat :app:assembleTvDebug\"",
+    "android:tv:assemble": "node scripts/run-gradle.mjs :app:assembleTvDebug",
+    "android:tv:test": "node scripts/run-gradle.mjs :app:testTvDebugUnitTest",
     "core:use-npm": "pnpm --filter @stremio-shell/core-bridge add @stremio/stremio-core-web@0.52.0",
-    "core:use-local": "powershell -ExecutionPolicy Bypass -File scripts/use-local-core.ps1"
+    "core:use-local": "node scripts/use-local-core.mjs"
   },
   "devDependencies": {
     "turbo": "^2.5.6",

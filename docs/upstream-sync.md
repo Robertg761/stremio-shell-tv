@@ -16,16 +16,16 @@ This repository tracks upstream `stremio-web` at a pinned commit and applies loc
 
 Run from repo root:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/sync-upstream-stremio-web.ps1
+```bash
+pnpm upstream:sync
 ```
 
 Optional overrides:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/sync-upstream-stremio-web.ps1 `
-  -Repository "https://github.com/Stremio/stremio-web.git" `
-  -Commit "<commit-sha>"
+```bash
+node scripts/sync-upstream-stremio-web.mjs \
+  --repository "https://github.com/Stremio/stremio-web.git" \
+  --commit "<commit-sha>"
 ```
 
 ## Rules

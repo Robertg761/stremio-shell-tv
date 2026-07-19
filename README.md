@@ -11,38 +11,34 @@ TV-focused monorepo for building a custom Stremio client with an Android/Google 
 
 ## Quick start
 
-```powershell
+```bash
 pnpm install
 pnpm dev
 ```
 
-Open the web shell at `https://localhost:5173`.
+Open the web shell at `http://localhost:5173`.
 
 ## Android TV builds
 
 Android builds require JDK 17. The repo includes `.java-version` for version
 managers that support it; verify `java -version` before invoking Gradle.
 
-Set Android SDK/AVD paths to `G:` (current shell session):
+Set JDK 17 and Android SDK paths for the current shell (Linux/macOS):
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/setup-android-env.ps1
+```bash
+source scripts/android-env.sh
 ```
 
-For macOS + zsh, add this once in your shell profile:
+Then build:
 
-```zsh
-source /Users/robert/Documents/Projects/stremio-shell-tv/scripts/android-env.zsh
-```
-
-```powershell
+```bash
 pnpm android:web-build
 pnpm android:tv:assemble
 ```
 
 Install artifact:
 
-- `apps/android-tv-host\app\build\outputs\apk\tv\debug\app-tv-debug.apk`
+- `apps/android-tv-host/app/build/outputs/apk/tv/debug/app-tv-debug.apk`
 
 The Android build packages generated web assets from
 `apps/android-tv-host/app/build/generated/assets/main/web`. Do not commit
@@ -86,7 +82,7 @@ Before pushing a release:
 
 ## Upstream stremio-web sync
 
-```powershell
+```bash
 pnpm upstream:sync
 ```
 
@@ -101,8 +97,8 @@ This repo is designed to consume either:
 
 To switch to local fork output:
 
-```powershell
-pnpm core:use-local
+```bash
+pnpm core:use-local /path/to/stremio-core
 ```
 
 The script packs your local fork and installs that package into `packages/core-bridge`.
