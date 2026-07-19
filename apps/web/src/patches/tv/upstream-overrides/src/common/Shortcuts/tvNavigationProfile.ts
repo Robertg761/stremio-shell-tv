@@ -1,3 +1,5 @@
+import * as tvNavigationCore from './tvNavigationCore';
+
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
 export type TvZone = 'sidebar' | 'topbar' | 'content' | 'overlay' | 'unknown';
@@ -250,45 +252,24 @@ const ROUTE_PROFILES: Record<TvRouteKey, TvNavigationProfile> = {
     default: BASE_PROFILE,
 };
 
-const isMetaDetailsStreamsRoute = (normalizedHash: string) => {
-    if (!normalizedHash.startsWith('#/meta-details')) {
-        return false;
-    }
-
-    return (
-        normalizedHash.includes('/streams') ||
-        normalizedHash.includes('streams=true') ||
-        normalizedHash.includes('stream=true') ||
-        normalizedHash.includes('streamid=') ||
-        normalizedHash.includes('selected=stream')
-    );
-};
 
 export const classifyTvRoute = (hash = ''): TvRouteKey => {
-    const normalized = String(hash || '').toLowerCase();
-
-    if (normalized.startsWith('#/player')) return 'player';
-    if (normalized.startsWith('#/discover')) return 'discover';
-    if (normalized.startsWith('#/meta-details')) {
-        return isMetaDetailsStreamsRoute(normalized) ? 'metaDetailsStreams' : 'metaDetailsVideos';
-    }
-    if (normalized.startsWith('#/settings')) return 'settings';
-    if (normalized.startsWith('#/search')) return 'search';
-    if (
-        normalized.startsWith('#/board') ||
-        normalized.startsWith('#/library') ||
-        normalized.startsWith('#/calendar') ||
-        normalized.startsWith('#/addons')
-    ) {
-        return 'board';
-    }
-
-    return 'default';
+    return tvNavigationCore.classifyTvRoute(hash) as TvRouteKey;
 };
 
 export const getRouteNavigationProfile = (hash = '') => {
     const routeKey = classifyTvRoute(hash);
     return ROUTE_PROFILES[routeKey] || BASE_PROFILE;
+};
+
+const FOCUSABLE_DESCENDANT_SELECTOR = DEFAULT_FOCUSABLE_SELECTORS.join(', ');
+
+// Substring overlay selectors (e.g. [class*="popup"]) can false-match leaf
+// controls like the 49x49 nav-menu button, which once scoped all spatial
+// navigation into an empty container (see docs/fix-remote-navigation.md).
+// A real overlay hosts focusable content; a matched control does not.
+export const isPlausibleOverlayElement = (element: HTMLElement): boolean => {
+    return element.querySelector(FOCUSABLE_DESCENDANT_SELECTOR) != null;
 };
 
 export const getZoneSelectors = (profile: TvNavigationProfile, zone: TvZone): string[] => {
@@ -304,8 +285,11 @@ export const resolveElementZone = (element: HTMLElement | null, profile: TvNavig
     }
 
     const overlaySelector = profile.zones.overlay.selectors.join(', ');
-    if (overlaySelector && (element.matches(overlaySelector) || element.closest(overlaySelector))) {
-        return 'overlay';
+    if (overlaySelector) {
+        const overlayMatch = element.closest<HTMLElement>(overlaySelector);
+        if (overlayMatch && isPlausibleOverlayElement(overlayMatch)) {
+            return 'overlay';
+        }
     }
 
     const sidebarSelector = profile.zones.sidebar.selectors.join(', ');
@@ -331,38 +315,5 @@ export const getZoneTransferTargets = (
     zone: TvZone,
     direction: Direction
 ): TvZone[] => {
-    if (zone === 'overlay') {
-        return ['overlay'];
-    }
-
-    if (zone === 'sidebar') {
-        if (direction === 'right') {
-            return routeKey === 'settings' ? ['content'] : ['topbar', 'content'];
-        }
-        return [];
-    }
-
-    if (zone === 'topbar') {
-        if (direction === 'left') return ['sidebar'];
-        if (direction === 'down') return ['content'];
-        return [];
-    }
-
-    if (zone === 'content') {
-        if (direction === 'left') {
-            return routeKey === 'settings' ? [] : ['sidebar', 'topbar'];
-        }
-        if (direction === 'up') {
-            return ['topbar'];
-        }
-        return [];
-    }
-
-    if (zone === 'unknown') {
-        if (direction === 'left') return ['sidebar', 'topbar', 'content'];
-        if (direction === 'right') return ['content', 'topbar', 'sidebar'];
-        return ['content', 'topbar', 'sidebar'];
-    }
-
-    return [];
+    return tvNavigationCore.getZoneTransferTargets(routeKey, zone, direction) as TvZone[];
 };

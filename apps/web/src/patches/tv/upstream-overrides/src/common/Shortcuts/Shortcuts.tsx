@@ -11,9 +11,11 @@ import {
 import {
     DEFAULT_FOCUSABLE_SELECTORS as PROFILE_DEFAULT_FOCUSABLE_SELECTORS,
     OVERLAY_SELECTORS as PROFILE_OVERLAY_SELECTORS,
+    SIDEBAR_SELECTORS as PROFILE_SIDEBAR_SELECTORS,
     getRouteNavigationProfile,
     getZoneSelectors,
     getZoneTransferTargets,
+    isPlausibleOverlayElement,
     resolveElementZone,
     type Direction as NavigationDirection,
     type TvZone,
@@ -184,6 +186,15 @@ const ensureFocusableElement = (element: HTMLElement) => {
     return element;
 };
 
+const SIDEBAR_NAV_SELECTOR = PROFILE_SIDEBAR_SELECTORS.join(', ');
+
+// Upstream marks the vertical nav tabs tabindex="-1" for its own focus
+// handling, but on TV they are first-class D-pad targets, so they stay in the
+// candidate pool. Programmatic focus() works on tabindex="-1" elements.
+const isExcludedByTabIndex = (element: HTMLElement) => {
+    return element.getAttribute('tabindex') === '-1' && !element.matches(SIDEBAR_NAV_SELECTOR);
+};
+
 const collectFocusableCandidates = (root: ParentNode, selectors: string[]) => {
     const seen = new Set<HTMLElement>();
     const candidates: HTMLElement[] = [];
@@ -194,7 +205,7 @@ const collectFocusableCandidates = (root: ParentNode, selectors: string[]) => {
             if (
                 seen.has(element) ||
                 !isVisibleElement(element) ||
-                element.getAttribute('tabindex') === '-1' ||
+                isExcludedByTabIndex(element) ||
                 element.matches('[class*="see-all-container"]')
             ) {
                 continue;
@@ -482,7 +493,9 @@ const isTvNavV2Enabled = () => {
         // Ignore storage errors in restricted webviews.
     }
 
-    return false;
+    // Zone-aware navigation is the default; set tv_nav_v2=0 (query, hash, or
+    // localStorage) to fall back to the legacy engine.
+    return true;
 };
 
 const resolveCurrentCandidate = (
@@ -608,12 +621,17 @@ const moveFocusByDirection = (
 const getTopOverlayElement = () => {
     const selector = OVERLAY_SELECTORS.join(', ');
     const overlays = Array.from(document.querySelectorAll<HTMLElement>(selector))
-        .filter((element) => isVisibleElement(element));
+        .filter((element) => isVisibleElement(element) && isPlausibleOverlayElement(element));
 
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement) {
         const activeOverlay = activeElement.closest<HTMLElement>(selector);
-        if (activeOverlay && isVisibleElement(activeOverlay) && !overlays.includes(activeOverlay)) {
+        if (
+            activeOverlay &&
+            isVisibleElement(activeOverlay) &&
+            isPlausibleOverlayElement(activeOverlay) &&
+            !overlays.includes(activeOverlay)
+        ) {
             overlays.push(activeOverlay);
         }
     }
@@ -756,11 +774,12 @@ const navigateTvDirectionV2 = (direction: Direction) => {
     const transferTargets = getZoneTransferTargets(profile.routeKey, baseZone, direction)
         .filter((zone) => zone !== baseZone);
     for (const targetZone of transferTargets) {
-        const targetSelectors = Array.from(new Set([
-            ...getZoneSelectors(profile, targetZone),
-            ...DEFAULT_FOCUSABLE_SELECTORS,
-        ]));
-        const targetCandidates = collectFocusableCandidates(document, targetSelectors);
+        // Restrict transfers to elements that actually belong to the target
+        // zone; widening with DEFAULT_FOCUSABLE_SELECTORS would let any nearby
+        // focusable hijack the transfer and mislabel the landing zone.
+        const targetSelectors = getZoneSelectors(profile, targetZone);
+        const targetCandidates = collectFocusableCandidates(document, targetSelectors)
+            .filter((candidate) => resolveElementZone(candidate, profile) === targetZone);
         if (targetCandidates.length === 0) {
             continue;
         }
