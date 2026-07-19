@@ -60,13 +60,15 @@
     </activity>
 
     <!-- Keeps the historical launcher component name from the tv flavor so
-         updates do not drop the app from TV home screens. -->
+         updates do not drop the app from TV home screens. Points at the
+         native Compose app since 0.3.0; the WebView MainActivity remains
+         intent-reachable as a fallback for one release. -->
     <activity-alias
       android:name=".TvLauncherActivity"
       android:enabled="true"
       android:exported="true"
       android:label="@string/app_name"
-      android:targetActivity=".MainActivity">
+      android:targetActivity=".tv.TvAppActivity">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LEANBACK_LAUNCHER" />

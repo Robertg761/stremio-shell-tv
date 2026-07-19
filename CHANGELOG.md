@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.0] - 2026-07-19
+- New native Compose TV app is now the launcher: TMDB catalogs (trending/popular/search, details with seasons and episodes), Comet addon stream picker, and Continue Watching with resume — no Stremio account or services required.
+- Playback moved to libmpv: plays formats the device lacks hardware decoders for (HEVC 10-bit, TrueHD/DTS audio, ASS/PGS subtitles) via software decoding, with a TV OSD, D-pad/media-key controls, and resume positions.
+- First run: enter your TMDB API key and Comet manifest URL (configured with your Real-Debrid key) under Settings.
+- The WebView shell remains intent-reachable as a fallback this release and will be removed next release.
+
 ## [0.2.0] - 2026-07-19
 - Fixed TV D-pad navigation dead ends on Board: overlay detection no longer lets substring selectors (e.g. the 49x49 nav-menu button matching `[class*="popup"]`) trap focus in an empty container.
 - Made the sidebar reachable by D-pad: upstream nav tabs carry `tabindex="-1"` and were excluded from the focus candidate pool entirely.
