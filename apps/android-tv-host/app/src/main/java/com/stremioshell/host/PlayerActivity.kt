@@ -94,11 +94,7 @@ class PlayerActivity : AppCompatActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    requestedOrientation = if (BuildConfig.IS_TV) {
-      ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-    } else {
-      ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-    }
+    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
     setContentView(R.layout.activity_player)
     applyImmersiveMode()
     volumeControlStream = AudioManager.STREAM_MUSIC
@@ -312,9 +308,6 @@ class PlayerActivity : AppCompatActivity() {
                 navigationContext = currentNavigationContext()
               )
             )
-            if (!BuildConfig.IS_TV) {
-              playerView.post { playerView.showController() }
-            }
           } else {
             PlaybackBridge.sendPlaybackEvent(
               this@PlayerActivity,

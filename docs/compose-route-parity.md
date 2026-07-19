@@ -37,7 +37,7 @@ Reference baseline: `docs/release-ui-oracle.md`.
 
 ## Remaining release gates
 
-1. Run Android JVM tests with JDK 17: `./gradlew :app:testTvDebugUnitTest`.
+1. Run Android JVM tests with JDK 17: `./gradlew :app:testDebugUnitTest`.
 2. Run Android instrumentation on API 26 and API 34 TV emulators.
 3. Execute the manual TV QA matrix on at least one physical Google TV class device.
 4. Attach QA screenshots/logs as CI or release artifacts, not committed repo files.

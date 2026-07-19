@@ -38,7 +38,7 @@ pnpm android:tv:assemble
 
 Install artifact:
 
-- `apps/android-tv-host/app/build/outputs/apk/tv/debug/app-tv-debug.apk`
+- `apps/android-tv-host/app/build/outputs/apk/debug/app-debug.apk`
 
 The Android build packages generated web assets from
 `apps/android-tv-host/app/build/generated/assets/main/web`. Do not commit

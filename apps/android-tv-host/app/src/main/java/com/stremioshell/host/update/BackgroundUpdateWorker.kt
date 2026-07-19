@@ -32,8 +32,7 @@ class BackgroundUpdateWorker(
       updateRepository.checkForUpdate(
         owner = owner,
         repo = repo,
-        currentVersionName = BuildConfig.VERSION_NAME,
-        isTvFlavor = BuildConfig.IS_TV
+        currentVersionName = BuildConfig.VERSION_NAME
       )
     }.getOrElse { error ->
       Log.w(TAG, "Periodic update check failed: ${error.message}")

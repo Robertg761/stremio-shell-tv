@@ -58,8 +58,8 @@ pnpm --filter @stremio-shell/web build
 
 # 2) Build Android TV variant
 cd apps/android-tv-host
-./gradlew :app:assembleTvDebug
-./gradlew :app:assembleTvDebug -PwebAppUrl=http://10.0.2.2:5173
+./gradlew :app:assembleDebug
+./gradlew :app:assembleDebug -PwebAppUrl=http://10.0.2.2:5173
 ```
 
 On Windows use `.\gradlew.bat` instead, or run `pnpm android:tv:assemble` from
@@ -68,12 +68,14 @@ the repo root on any platform.
 Install to connected device/emulator:
 
 ```bash
-./gradlew :app:installTvDebug
+./gradlew :app:installDebug
 ```
 
-## Flavor behavior
+## TV-only app
 
-- `tv` flavor has Leanback launcher category and TV banner.
+The app is Android TV-only (single variant, no flavors): the manifest requires
+leanback, marks touchscreen as not required, and registers the Leanback
+launcher alias with the TV banner.
 
 ## Generated assets
 

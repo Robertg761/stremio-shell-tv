@@ -12,7 +12,7 @@ Each milestone must pass all listed gates before the next milestone starts. A ga
   - `pnpm build` passes.
   - `pnpm test:contracts` passes.
   - Android JVM tests pass with JDK 17:
-    - `cd apps/android-tv-host && ./gradlew :app:testTvDebugUnitTest`
+    - `cd apps/android-tv-host && ./gradlew :app:testDebugUnitTest`
 - Generated build outputs and QA captures are not committed:
   - `apps/android-tv-host/app/src/main/assets/web/`
   - `artifacts/`
@@ -36,8 +36,8 @@ Each milestone must pass all listed gates before the next milestone starts. A ga
 - Host lifecycle/network events are visible in web event stream.
 - TV smoke checks pass:
   - `pnpm test:tv-smoke`
-  - Android JVM test suite (`:app:testTvDebugUnitTest`)
-  - Android instrumentation smoke suite (`:app:connectedTvDebugAndroidTest` in CI/device lab)
+  - Android JVM test suite (`:app:testDebugUnitTest`)
+  - Android instrumentation smoke suite (`:app:connectedDebugAndroidTest` in CI/device lab)
   - Manual matrix in `docs/tv-qa-matrix.md`
 
 ## Milestone 2 gates

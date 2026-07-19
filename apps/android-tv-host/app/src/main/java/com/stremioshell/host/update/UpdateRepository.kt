@@ -6,8 +6,7 @@ class UpdateRepository(
   fun checkForUpdate(
     owner: String,
     repo: String,
-    currentVersionName: String,
-    isTvFlavor: Boolean
+    currentVersionName: String
   ): UpdateInfo? {
     val latest = api.fetchLatestRelease(owner, repo)
     val latestTag = latest.tagName.trim()
@@ -19,7 +18,7 @@ class UpdateRepository(
       return null
     }
 
-    val selectedApk = selectApkAsset(latest.assets, isTvFlavor) ?: return null
+    val selectedApk = selectApkAsset(latest.assets) ?: return null
     return UpdateInfo(
       latestVersionName = latestTag.removePrefix("v").removePrefix("V"),
       apkName = selectedApk.name,
@@ -52,7 +51,7 @@ class UpdateRepository(
       .lowercase()
   }
 
-  private fun selectApkAsset(assets: List<GitHubAssetDto>, isTvFlavor: Boolean): GitHubAssetDto? {
+  private fun selectApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {
     val apkAssets = assets.filter { asset ->
       asset.name.endsWith(".apk", ignoreCase = true)
     }
@@ -60,9 +59,8 @@ class UpdateRepository(
       return null
     }
 
-    val flavorToken = if (isTvFlavor) "-tv-" else "-mobile-"
     val flavorMatches = apkAssets.filter { asset ->
-      asset.name.contains(flavorToken, ignoreCase = true)
+      asset.name.contains("-tv-", ignoreCase = true)
     }
     val nonDebugFlavorMatch = flavorMatches.firstOrNull { asset ->
       !asset.name.contains("debug", ignoreCase = true)

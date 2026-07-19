@@ -47,8 +47,8 @@ pnpm build
 pnpm test:contracts
 pnpm test:tv-smoke
 cd apps/android-tv-host
-./gradlew :app:testTvDebugUnitTest
-./gradlew :app:connectedTvDebugAndroidTest
+./gradlew :app:testDebugUnitTest
+./gradlew :app:connectedDebugAndroidTest
 ```
 
 The instrumentation matrix must include API 26 and API 34 TV emulators before a

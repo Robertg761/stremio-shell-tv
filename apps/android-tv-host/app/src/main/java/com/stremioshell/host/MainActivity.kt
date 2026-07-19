@@ -190,7 +190,7 @@ class MainActivity : AppCompatActivity() {
     checkForUpdates(manual = false)
 
     emitLifecycle("created")
-    appendDiagnostic("MainActivity created for ${if (BuildConfig.IS_TV) "tv" else "mobile"} flavor.")
+    appendDiagnostic("MainActivity created.")
   }
 
   override fun onNewIntent(intent: Intent) {
@@ -247,17 +247,15 @@ class MainActivity : AppCompatActivity() {
   }
 
   override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-    if (BuildConfig.IS_TV) {
-      if (BuildConfig.DEBUG && event.action == KeyEvent.ACTION_DOWN) {
-        appendDiagnostic("TV key event passthrough code=${event.keyCode} webReady=$webReady")
-      }
+    if (BuildConfig.DEBUG && event.action == KeyEvent.ACTION_DOWN) {
+      appendDiagnostic("TV key event passthrough code=${event.keyCode} webReady=$webReady")
     }
 
     return super.dispatchKeyEvent(event)
   }
 
   override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-    if (BuildConfig.IS_TV && event.action == MotionEvent.ACTION_SCROLL) {
+    if (event.action == MotionEvent.ACTION_SCROLL) {
       // Prevent touchpad/rotary scroll gestures from scrolling WebView content on TV.
       return true
     }
@@ -275,11 +273,9 @@ class MainActivity : AppCompatActivity() {
       mediaPlaybackRequiresUserGesture = false
       allowFileAccess = false
       mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-      if (BuildConfig.IS_TV) {
-        val currentUserAgent = userAgentString.orEmpty()
-        if (!currentUserAgent.contains("Android TV")) {
-          userAgentString = "$currentUserAgent StremioShellTV Android TV"
-        }
+      val currentUserAgent = userAgentString.orEmpty()
+      if (!currentUserAgent.contains("Android TV")) {
+        userAgentString = "$currentUserAgent StremioShellTV Android TV"
       }
     }
 
@@ -402,8 +398,7 @@ class MainActivity : AppCompatActivity() {
         updateRepository.checkForUpdate(
           owner = owner,
           repo = repo,
-          currentVersionName = BuildConfig.VERSION_NAME,
-          isTvFlavor = BuildConfig.IS_TV
+          currentVersionName = BuildConfig.VERSION_NAME
         )
       }
 
@@ -958,7 +953,7 @@ class MainActivity : AppCompatActivity() {
   private fun exportDiagnostics() {
     val text = buildString {
       appendLine("Stremio Shell diagnostics")
-      appendLine("flavor=${if (BuildConfig.IS_TV) "tv" else "mobile"}")
+      appendLine("variant=tv")
       appendLine("timestamp=${System.currentTimeMillis()}")
       appendLine()
       diagnostics.forEach { appendLine(it) }
@@ -1066,9 +1061,7 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun requestWebViewFocusIfTv() {
-    if (BuildConfig.IS_TV) {
-      webView.requestFocus()
-    }
+    webView.requestFocus()
   }
 
   private fun showStartupLoading(title: String, message: String) {
@@ -1326,7 +1319,7 @@ class MainActivity : AppCompatActivity() {
     if (path == "/device-info") {
       val body = JSONObject()
         .put("platform", "android")
-        .put("isTv", BuildConfig.IS_TV)
+        .put("isTv", true)
       return createTextResponse("application/json", body.toString(), allowedOrigin)
     }
 

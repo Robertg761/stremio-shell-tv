@@ -14,8 +14,8 @@
     "test:web": "pnpm --filter @stremio-shell/web test",
     "upstream:sync": "node scripts/sync-upstream-stremio-web.mjs",
     "android:web-build": "pnpm --filter @stremio-shell/web build",
-    "android:tv:assemble": "node scripts/run-gradle.mjs :app:assembleTvDebug",
-    "android:tv:test": "node scripts/run-gradle.mjs :app:testTvDebugUnitTest",
+    "android:tv:assemble": "node scripts/run-gradle.mjs :app:assembleDebug",
+    "android:tv:test": "node scripts/run-gradle.mjs :app:testDebugUnitTest",
     "core:use-npm": "pnpm --filter @stremio-shell/core-bridge add @stremio/stremio-core-web@0.52.0",
     "core:use-local": "node scripts/use-local-core.mjs"
   },

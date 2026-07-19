@@ -61,15 +61,15 @@ jobs:
         run: |
           cd apps/android-tv-host
           chmod +x ./gradlew
-          ./gradlew :app:testTvDebugUnitTest :app:assembleTvDebug
+          ./gradlew :app:testDebugUnitTest :app:assembleDebug
       - name: Upload Android host artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-host
           path: |
-            apps/android-tv-host/app/build/outputs/apk/tv/debug/*.apk
-            apps/android-tv-host/app/build/reports/tests/testTvDebugUnitTest/
+            apps/android-tv-host/app/build/outputs/apk/debug/*.apk
+            apps/android-tv-host/app/build/reports/tests/testDebugUnitTest/
           if-no-files-found: ignore
 
   android-tv-instrumentation:
@@ -110,7 +110,7 @@ jobs:
           script: |
             cd apps/android-tv-host
             chmod +x ./gradlew
-            ./gradlew :app:connectedTvDebugAndroidTest
+            ./gradlew :app:connectedDebugAndroidTest
       - name: Upload instrumentation artifacts
         if: always()
         uses: actions/upload-artifact@v4
