@@ -23,6 +23,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,6 +51,12 @@ fun DetailsScreen(
 
   LoadStateContent(details, loadingText = "Loading details...") { media ->
     var selectedSeason by rememberSaveable { mutableStateOf(media.seasons.firstOrNull()?.seasonNumber ?: 1) }
+    val primaryFocus = androidx.compose.runtime.remember { FocusRequester() }
+
+    LaunchedEffect(media.item.tmdbId) {
+      // Land focus on the primary action instead of leaving it in the nav rail.
+      runCatching { primaryFocus.requestFocus() }
+    }
 
     LaunchedEffect(media.item.tmdbId, selectedSeason) {
       if (media.item.type == MediaType.Show && media.seasons.isNotEmpty()) {
@@ -94,7 +102,10 @@ fun DetailsScreen(
                 style = MaterialTheme.typography.bodySmall,
               )
             } else if (media.item.type == MediaType.Movie) {
-              Button(onClick = { onPlay(media, null, null) }) {
+              Button(
+                onClick = { onPlay(media, null, null) },
+                modifier = Modifier.focusRequester(primaryFocus),
+              ) {
                 Text("Find Streams")
               }
             }
@@ -107,7 +118,8 @@ fun DetailsScreen(
               items(media.seasons, key = { it.seasonNumber }) { season ->
                 Button(
                   onClick = { selectedSeason = season.seasonNumber },
-                  modifier = if (season.seasonNumber == selectedSeason) Modifier else Modifier.alpha(0.6f),
+                  modifier = (if (season.seasonNumber == selectedSeason) Modifier else Modifier.alpha(0.6f))
+                    .then(if (season.seasonNumber == media.seasons.first().seasonNumber && media.item.type == MediaType.Show) Modifier.focusRequester(primaryFocus) else Modifier),
                 ) {
                   Text("Season ${season.seasonNumber}")
                 }

@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
+import com.stremioshell.host.BuildConfig
+import com.stremioshell.host.tv.data.SettingsStore
 import com.stremioshell.host.tv.data.WatchStateStore
 import com.stremioshell.host.tv.player.MpvPlayerActivity
 import com.stremioshell.host.tv.ui.StreamLauncher
@@ -20,6 +22,19 @@ class TvAppActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     val watchStore = WatchStateStore(applicationContext)
+
+    if (BuildConfig.DEBUG) {
+      // Debug-only: allow test automation to inject settings via intent extras.
+      val debugTmdbKey = intent.getStringExtra("debug_tmdb_key")
+      val debugAddonUrl = intent.getStringExtra("debug_addon_url")
+      if (debugTmdbKey != null || debugAddonUrl != null) {
+        val settings = SettingsStore(applicationContext)
+        lifecycleScope.launch {
+          debugTmdbKey?.let { settings.setTmdbApiKey(it) }
+          debugAddonUrl?.let { settings.setAddonManifestUrl(it) }
+        }
+      }
+    }
     setContent {
       StremioTvTheme {
         TvApp(

@@ -7,12 +7,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Card
@@ -28,9 +31,16 @@ fun StreamsScreen(
   onStreamClick: (AddonStream) -> Unit,
 ) {
   val streams by viewModel.streams.collectAsState()
+  val firstStreamFocus = remember { FocusRequester() }
 
   LaunchedEffect(screen) {
     viewModel.loadStreams(screen.imdbId, screen.season, screen.episode)
+  }
+
+  LaunchedEffect(streams) {
+    if (streams is com.stremioshell.host.tv.LoadState.Ready) {
+      runCatching { firstStreamFocus.requestFocus() }
+    }
   }
 
   Column(modifier = Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 28.dp)) {
@@ -49,8 +59,12 @@ fun StreamsScreen(
           verticalArrangement = Arrangement.spacedBy(10.dp),
           contentPadding = PaddingValues(bottom = 32.dp),
         ) {
-          items(list, key = { it.url ?: it.hashCode().toString() }) { stream ->
-            Card(onClick = { onStreamClick(stream) }, modifier = Modifier.fillMaxWidth(0.85f)) {
+          itemsIndexed(list, key = { _, s -> s.url ?: s.hashCode().toString() }) { index, stream ->
+            Card(
+              onClick = { onStreamClick(stream) },
+              modifier = Modifier.fillMaxWidth(0.85f)
+                .then(if (index == 0) Modifier.focusRequester(firstStreamFocus) else Modifier),
+            ) {
               Column(modifier = Modifier.padding(14.dp)) {
                 Text(stream.label, style = MaterialTheme.typography.titleMedium)
                 if (stream.detail.isNotBlank()) {
