@@ -46,8 +46,8 @@ android {
     applicationId = "com.stremioshell.host.tv"
     minSdk = 26
     targetSdk = 34
-    versionCode = 2
-    versionName = "0.1.1"
+    versionCode = 3
+    versionName = "0.2.0"
     resValue("string", "app_name", "Stremio Shell TV")
     buildConfigField("String", "GITHUB_RELEASE_OWNER", "\"$githubReleaseOwner\"")
     buildConfigField("String", "GITHUB_RELEASE_REPO", "\"$githubReleaseRepo\"")
