@@ -1,5 +1,5 @@
-import { createPlaybackOpenCommand, sendHostCommand } from "../../host-bridge";
-import type { NavigationContext, NativePlaybackSettings, NativePlaybackTracks } from "../../types/host-bridge";
+import { createPlaybackOpenCommand, sendHostCommand } from "../../host-bridge.ts";
+import type { NavigationContext, NativePlaybackSettings, NativePlaybackTracks } from "../../types/host-bridge.ts";
 
 type NativePlaybackOpenPayload = {
   streamId?: string;

@@ -11,6 +11,7 @@
     "lint": "turbo run lint",
     "test:contracts": "pnpm --filter @stremio-shell/core-bridge build && node --test \"packages/core-bridge/test/*.test.mjs\"",
     "test:tv-smoke": "pnpm --filter @stremio-shell/web test:tv-smoke",
+    "test:web": "pnpm --filter @stremio-shell/web test",
     "upstream:sync": "node scripts/sync-upstream-stremio-web.mjs",
     "android:web-build": "pnpm --filter @stremio-shell/web build",
     "android:tv:assemble": "node scripts/run-gradle.mjs :app:assembleTvDebug",

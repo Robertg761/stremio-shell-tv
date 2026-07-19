@@ -7,7 +7,7 @@ import {
   type NavigationContext,
   type NativePlaybackSettings,
   type NativePlaybackTracks
-} from "./types/host-bridge";
+} from "./types/host-bridge.ts";
 
 type HostEventListener = (event: HostEvent) => void;
 

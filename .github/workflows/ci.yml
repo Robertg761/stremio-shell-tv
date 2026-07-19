@@ -30,6 +30,8 @@ jobs:
         run: pnpm build
       - name: Contract tests
         run: pnpm test:contracts
+      - name: Web unit tests
+        run: pnpm test:web
       - name: TV smoke tests
         run: pnpm test:tv-smoke
 

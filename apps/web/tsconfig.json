@@ -1,10 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["vite/client"],
-    "baseUrl": "."
+    "types": [
+      "vite/client",
+      "node"
+    ],
+    "baseUrl": ".",
+    "allowImportingTsExtensions": true
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "exclude": [
     "src/patches/**/upstream-overrides/**"
   ]

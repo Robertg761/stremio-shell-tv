@@ -1,4 +1,4 @@
-import { createHostEnvelope, type HostCommand, type HostEvent } from "./host-bridge";
+import { createHostEnvelope, type HostCommand, type HostEvent } from "./host-bridge.ts";
 
 export const playbackOpenContractSample: HostCommand = createHostEnvelope("playback.open", {
   streamId: "stream-1",
