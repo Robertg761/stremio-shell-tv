@@ -16,6 +16,7 @@
     android:required="false" />
 
   <application
+    android:name=".tv.StremioTvApplication"
     android:allowBackup="true"
     android:banner="@drawable/ic_tv_banner"
     android:icon="@mipmap/ic_launcher"

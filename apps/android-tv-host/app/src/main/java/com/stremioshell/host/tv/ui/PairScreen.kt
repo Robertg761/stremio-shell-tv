@@ -12,11 +12,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.DisposableEffect
@@ -47,7 +50,10 @@ fun PairScreen(viewModel: TvAppViewModel, onPaired: () -> Unit) {
 
 @Composable
 private fun ReadyContent(url: String) {
-  val qr = remember(url) { encodeQrBitmap(url, 520).asImageBitmap() }
+  // Encode off the main thread; 520x520 pixel fill would otherwise hitch.
+  val qr: ImageBitmap? by produceState<ImageBitmap?>(initialValue = null, url) {
+    value = withContext(Dispatchers.Default) { encodeQrBitmap(url, 520).asImageBitmap() }
+  }
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -59,14 +65,19 @@ private fun ReadyContent(url: String) {
       textAlign = TextAlign.Center,
       modifier = Modifier.padding(horizontal = 40.dp),
     )
-    Image(
-      bitmap = qr,
-      contentDescription = "Pairing QR code",
-      modifier = Modifier
-        .size(260.dp)
-        .background(Color.White)
-        .padding(10.dp),
-    )
+    val bitmap = qr
+    if (bitmap != null) {
+      Image(
+        bitmap = bitmap,
+        contentDescription = "Pairing QR code",
+        modifier = Modifier
+          .size(260.dp)
+          .background(Color.White)
+          .padding(10.dp),
+      )
+    } else {
+      Box(modifier = Modifier.size(260.dp))
+    }
     Text(
       "or open  $url  in your phone browser",
       style = MaterialTheme.typography.bodyMedium,

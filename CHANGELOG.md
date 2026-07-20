@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.3.4] - 2026-07-19
+- Smoother navigation: posters now decode as RGB_565 with a bounded image cache, cutting memory use and the garbage-collection pauses that caused multi-hundred-millisecond freezes while moving around poster rows (99th-percentile frame time measured dropping from ~300ms to ~48ms on a Google TV Streamer). The QR code is now generated off the main thread.
+
 ## [0.3.3] - 2026-07-19
 - Set up with your phone: the TV shows a QR code, you scan it and paste your TMDB key and Comet URL from your phone's keyboard, and they push straight to the TV over your home network - no more typing a long URL on the remote. Available from the welcome screen and Settings. Manual entry is still there as a fallback.
 
