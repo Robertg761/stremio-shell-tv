@@ -19,6 +19,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -28,7 +29,12 @@ import com.stremioshell.host.tv.data.tmdb.MediaItem
 @Composable
 fun MediaCard(item: MediaItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
   Column(modifier = modifier.width(140.dp)) {
-    Card(onClick = onClick, modifier = Modifier.width(140.dp).height(200.dp)) {
+    Card(
+      onClick = onClick,
+      // Modest focus scale so the poster does not grow over its own title.
+      scale = CardDefaults.scale(focusedScale = 1.08f),
+      modifier = Modifier.width(140.dp).height(200.dp),
+    ) {
       if (item.posterUrl != null) {
         AsyncImage(
           model = item.posterUrl,
@@ -47,7 +53,8 @@ fun MediaCard(item: MediaItem, onClick: () -> Unit, modifier: Modifier = Modifie
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
       style = MaterialTheme.typography.bodySmall,
-      modifier = Modifier.padding(top = 6.dp).width(140.dp),
+      // Clears the focused card's scaled-up bottom edge.
+      modifier = Modifier.padding(top = 14.dp).width(140.dp),
     )
   }
 }

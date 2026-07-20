@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.3.6] - 2026-07-20
+- Fixed the focused poster growing over its own title (smaller focus scale plus more spacing), and made vertical navigation settle each focused row at a consistent position with the neighbouring rows peeking above and below, instead of leaving it jammed against the screen edge.
+
 ## [0.3.5] - 2026-07-19
 - Added a baseline profile so the Compose UI paths (rows, cards, focus, image loading) are ahead-of-time compiled, cutting cold-start and first-interaction jank; it's embedded in the APK and installed at first run.
 - Trimmed the poster memory cache further for RAM-constrained TV hardware to reduce swap/GC pressure during navigation.

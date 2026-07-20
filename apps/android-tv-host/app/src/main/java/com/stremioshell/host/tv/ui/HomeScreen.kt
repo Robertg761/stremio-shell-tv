@@ -13,20 +13,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -80,19 +85,42 @@ fun HomeScreen(
     return
   }
 
+  val listState = rememberLazyListState()
+  val scope = rememberCoroutineScope()
+
+  // Settle a newly focused row at a stable "focus line" ~18% down the viewport.
+  // Index-based (not offset-based) so it doesn't race the default bring-into-
+  // view: a negative scrollOffset anchors the row that far below the top.
+  fun scrollRowToFocusLine(lazyIndex: Int) {
+    val target = (listState.layoutInfo.viewportSize.height * 0.18f).toInt()
+    scope.launch {
+      // Let the default bring-into-view settle, then take over as the final
+      // scroll so the row lands on the focus line rather than the edge.
+      kotlinx.coroutines.delay(60)
+      listState.animateScrollToItem(lazyIndex, -target)
+    }
+  }
+
   LoadStateContent(
     rails,
     loadingText = "Loading catalogs...",
     onRetry = { viewModel.loadHomeRails(force = true) },
   ) { railList ->
+    val continueOffset = if (continueWatching.isNotEmpty()) 1 else 0
     LazyColumn(
+      state = listState,
       verticalArrangement = Arrangement.spacedBy(28.dp),
       contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp),
       modifier = Modifier.fillMaxSize(),
     ) {
       if (continueWatching.isNotEmpty()) {
         item(key = "continue") {
-          ContinueWatchingRow(continueWatching, onResumeClick, firstContentFocus)
+          ContinueWatchingRow(
+            continueWatching,
+            onResumeClick,
+            firstContentFocus,
+            onRowFocused = { scrollRowToFocusLine(0) },
+          )
         }
       }
       items(railList.size, key = { railList[it].title }) { index ->
@@ -102,6 +130,7 @@ fun HomeScreen(
           items = rail.items,
           firstCardFocus = if (index == 0 && continueWatching.isEmpty()) firstContentFocus else null,
           onItemClick = { item -> onItemClick(item.type, item.tmdbId) },
+          onRowFocused = { scrollRowToFocusLine(continueOffset + index) },
         )
       }
     }
@@ -114,9 +143,14 @@ private fun MediaRowFocusable(
   items: List<com.stremioshell.host.tv.data.tmdb.MediaItem>,
   firstCardFocus: FocusRequester?,
   onItemClick: (com.stremioshell.host.tv.data.tmdb.MediaItem) -> Unit,
+  onRowFocused: () -> Unit,
 ) {
   if (items.isEmpty()) return
-  Column(modifier = Modifier.fillMaxWidth()) {
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .onFocusChanged { if (it.hasFocus) onRowFocused() },
+  ) {
     Text(
       text = title,
       style = MaterialTheme.typography.titleLarge,
@@ -147,8 +181,9 @@ private fun ContinueWatchingRow(
   entries: List<WatchEntry>,
   onResumeClick: (WatchEntry) -> Unit,
   firstCardFocus: FocusRequester,
+  onRowFocused: () -> Unit,
 ) {
-  Column {
+  Column(modifier = Modifier.onFocusChanged { if (it.hasFocus) onRowFocused() }) {
     Text(
       text = "Continue Watching",
       style = MaterialTheme.typography.titleLarge,
@@ -163,6 +198,7 @@ private fun ContinueWatchingRow(
         Column(modifier = Modifier.width(140.dp)) {
           Card(
             onClick = { onResumeClick(entry) },
+            scale = CardDefaults.scale(focusedScale = 1.08f),
             modifier = Modifier.width(140.dp).height(200.dp)
               .then(if (index == 0) Modifier.focusRequester(firstCardFocus) else Modifier),
           ) {
@@ -200,7 +236,7 @@ private fun ContinueWatchingRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 6.dp),
+            modifier = Modifier.padding(top = 14.dp),
           )
         }
       }

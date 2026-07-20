@@ -1,7 +1,7 @@
 {
   "name": "stremio-shell-tv",
   "private": true,
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Android/Google TV shell for stremio-core in a dedicated TV-focused repo.",
   "packageManager": "pnpm@10.15.0",
   "scripts": {
