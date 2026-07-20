@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.3.2] - 2026-07-19
+- Fixed Settings being unusable by remote: the text fields trapped the D-pad, so you could not reach the second field or the Save button. Up/Down now walk cleanly between the TMDB field, addon field, and Save. Verified on a physical Google TV Streamer with the full chain (browse -> Comet streams -> Real-Debrid playback in libmpv).
+
 ## [0.3.1] - 2026-07-19
 - Focus lands on content when the app opens and when screens change - no more stranded focus in the nav rail.
 - New welcome screen on first run with a one-press path to Settings; Save now tests both connections and reports "TMDB: connected | Addon: connected (Comet)".

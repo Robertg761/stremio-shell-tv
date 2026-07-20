@@ -14,10 +14,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
@@ -34,6 +42,10 @@ fun SettingsScreen(viewModel: TvAppViewModel) {
   var status by rememberSaveable { mutableStateOf("") }
   var seeded by rememberSaveable { mutableStateOf(false) }
 
+  val tmdbFocus = remember { FocusRequester() }
+  val addonFocus = remember { FocusRequester() }
+  val saveFocus = remember { FocusRequester() }
+
   LaunchedEffect(storedKey, storedAddon) {
     if (!seeded && storedKey != null && storedAddon != null) {
       tmdbKey = storedKey.orEmpty()
@@ -41,6 +53,8 @@ fun SettingsScreen(viewModel: TvAppViewModel) {
       seeded = true
     }
   }
+
+  LaunchedEffect(Unit) { runCatching { tmdbFocus.requestFocus() } }
 
   Column(
     modifier = Modifier
@@ -58,7 +72,12 @@ fun SettingsScreen(viewModel: TvAppViewModel) {
       singleLine = true,
       placeholder = { Text("TMDB API key") },
       colors = settingsFieldColors(),
-      modifier = Modifier.fillMaxWidth(0.8f),
+      modifier = Modifier
+        .fillMaxWidth(0.8f)
+        .focusRequester(tmdbFocus)
+        // A material3 text field traps the D-pad on TV, so move focus
+        // between fields explicitly before it consumes the key.
+        .verticalFieldNav(down = addonFocus, up = null),
     )
 
     Text(
@@ -71,17 +90,33 @@ fun SettingsScreen(viewModel: TvAppViewModel) {
       singleLine = true,
       placeholder = { Text("https://comet.../<config>/manifest.json") },
       colors = settingsFieldColors(),
-      modifier = Modifier.fillMaxWidth(0.8f),
+      modifier = Modifier
+        .fillMaxWidth(0.8f)
+        .focusRequester(addonFocus)
+        .verticalFieldNav(down = saveFocus, up = tmdbFocus),
     )
 
-    Button(onClick = {
-      viewModel.saveSettings(tmdbKey, addonUrl) { status = it }
-    }) {
+    Button(
+      onClick = { viewModel.saveSettings(tmdbKey, addonUrl) { status = it } },
+      modifier = Modifier.focusRequester(saveFocus),
+    ) {
       Text("Save")
     }
 
     if (status.isNotBlank()) {
       Text(status, style = MaterialTheme.typography.bodyMedium)
+    }
+  }
+}
+
+/** Redirect D-pad up/down to explicit neighbours so text fields can't trap focus on TV. */
+private fun Modifier.verticalFieldNav(down: FocusRequester?, up: FocusRequester?): Modifier {
+  return onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+    when (event.key) {
+      Key.DirectionDown -> down?.let { runCatching { it.requestFocus() }; true } ?: false
+      Key.DirectionUp -> up?.let { runCatching { it.requestFocus() }; true } ?: false
+      else -> false
     }
   }
 }
