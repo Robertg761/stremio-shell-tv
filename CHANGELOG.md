@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.3.3] - 2026-07-19
+- Set up with your phone: the TV shows a QR code, you scan it and paste your TMDB key and Comet URL from your phone's keyboard, and they push straight to the TV over your home network - no more typing a long URL on the remote. Available from the welcome screen and Settings. Manual entry is still there as a fallback.
+
 ## [0.3.2] - 2026-07-19
 - Fixed Settings being unusable by remote: the text fields trapped the D-pad, so you could not reach the second field or the Save button. Up/Down now walk cleanly between the TMDB field, addon field, and Save. Verified on a physical Google TV Streamer with the full chain (browse -> Comet streams -> Real-Debrid playback in libmpv).
 

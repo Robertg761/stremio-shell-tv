@@ -87,9 +87,16 @@ fun TvApp(streamLauncher: StreamLauncher = StreamLauncher { _, _ -> }) {
       ) {
         Box(modifier = Modifier.fillMaxSize()) {
           when (val screen = current) {
-            is Screen.Home -> HomeScreen(viewModel, onItemClick = openDetails, onResumeClick = openResume, onOpenSettings = { setRoot(Screen.Settings) })
+            is Screen.Home -> HomeScreen(
+              viewModel,
+              onItemClick = openDetails,
+              onResumeClick = openResume,
+              onPairWithPhone = { push(Screen.Pair) },
+              onOpenSettings = { setRoot(Screen.Settings) },
+            )
             is Screen.Search -> SearchScreen(viewModel, onItemClick = openDetails)
-            is Screen.Settings -> SettingsScreen(viewModel)
+            is Screen.Settings -> SettingsScreen(viewModel, onPairWithPhone = { push(Screen.Pair) })
+            is Screen.Pair -> PairScreen(viewModel, onPaired = { setRoot(Screen.Home) })
             is Screen.Details -> DetailsScreen(viewModel, screen.type, screen.tmdbId) { media, season, episode ->
               val imdbId = media.imdbId ?: return@DetailsScreen
               push(

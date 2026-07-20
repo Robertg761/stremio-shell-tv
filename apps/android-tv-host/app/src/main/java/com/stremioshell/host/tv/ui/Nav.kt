@@ -7,6 +7,7 @@ sealed interface Screen {
   data object Home : Screen
   data object Search : Screen
   data object Settings : Screen
+  data object Pair : Screen
   data class Details(val type: MediaType, val tmdbId: Int) : Screen
   data class Streams(
     val imdbId: String,

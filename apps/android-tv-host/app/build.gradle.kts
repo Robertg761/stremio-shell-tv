@@ -47,8 +47,8 @@ android {
     applicationId = "com.stremioshell.host.tv"
     minSdk = 26
     targetSdk = 34
-    versionCode = 6
-    versionName = "0.3.2"
+    versionCode = 7
+    versionName = "0.3.3"
     resValue("string", "app_name", "Stremio Shell TV")
     buildConfigField("String", "GITHUB_RELEASE_OWNER", "\"$githubReleaseOwner\"")
     buildConfigField("String", "GITHUB_RELEASE_REPO", "\"$githubReleaseRepo\"")
@@ -195,6 +195,10 @@ dependencies {
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
   implementation("dev.jdtech.mpv:libmpv:0.4.1")
+
+  // Phone-pairing config entry (QR + tiny on-device web form)
+  implementation("com.google.zxing:core:3.5.3")
+  implementation("org.nanohttpd:nanohttpd:2.3.1")
 
   testImplementation("junit:junit:4.13.2")
   testImplementation("org.json:json:20240303")

@@ -33,7 +33,7 @@ import androidx.tv.material3.Text
 import com.stremioshell.host.tv.TvAppViewModel
 
 @Composable
-fun SettingsScreen(viewModel: TvAppViewModel) {
+fun SettingsScreen(viewModel: TvAppViewModel, onPairWithPhone: () -> Unit = {}) {
   val storedKey by viewModel.tmdbApiKey.collectAsState()
   val storedAddon by viewModel.addonManifestUrl.collectAsState()
 
@@ -64,6 +64,10 @@ fun SettingsScreen(viewModel: TvAppViewModel) {
     verticalArrangement = Arrangement.spacedBy(18.dp),
   ) {
     Text("Settings", style = MaterialTheme.typography.headlineMedium)
+
+    Button(onClick = onPairWithPhone) {
+      Text("Set up with phone (scan a QR code)")
+    }
 
     Text("TMDB API key (themoviedb.org > Settings > API)", style = MaterialTheme.typography.titleSmall)
     OutlinedTextField(

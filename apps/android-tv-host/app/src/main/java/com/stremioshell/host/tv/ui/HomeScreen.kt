@@ -40,6 +40,7 @@ fun HomeScreen(
   viewModel: TvAppViewModel,
   onItemClick: (MediaType, Int) -> Unit,
   onResumeClick: (WatchEntry) -> Unit,
+  onPairWithPhone: () -> Unit,
   onOpenSettings: () -> Unit,
 ) {
   val rails by viewModel.homeRails.collectAsState()
@@ -65,8 +66,14 @@ fun HomeScreen(
           style = MaterialTheme.typography.bodyLarge,
           modifier = Modifier.padding(top = 10.dp, bottom = 24.dp),
         )
-        Button(onClick = onOpenSettings, modifier = Modifier.focusRequester(firstContentFocus)) {
-          Text("Set up now")
+        Button(onClick = onPairWithPhone, modifier = Modifier.focusRequester(firstContentFocus)) {
+          Text("Set up with phone")
+        }
+        Button(
+          onClick = onOpenSettings,
+          modifier = Modifier.padding(top = 12.dp),
+        ) {
+          Text("Enter manually")
         }
       }
     }

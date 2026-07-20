@@ -13,9 +13,12 @@ import com.stremioshell.host.tv.data.tmdb.MediaDetails
 import com.stremioshell.host.tv.data.tmdb.MediaItem
 import com.stremioshell.host.tv.data.tmdb.MediaType
 import com.stremioshell.host.tv.data.tmdb.TmdbClient
+import com.stremioshell.host.tv.pairing.ConfigPairingServer
+import com.stremioshell.host.tv.pairing.findLanIpv4
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -55,6 +58,59 @@ class TvAppViewModel(application: Application) : AndroidViewModel(application) {
   val streams: StateFlow<LoadState<List<AddonStream>>> = _streams
 
   private var railsLoadedForKey: String? = null
+
+  // Phone pairing.
+  sealed interface PairingState {
+    data object Idle : PairingState
+    data class Ready(val url: String) : PairingState
+    data object Received : PairingState
+    data class Failed(val message: String) : PairingState
+  }
+
+  private val _pairing = MutableStateFlow<PairingState>(PairingState.Idle)
+  val pairing: StateFlow<PairingState> = _pairing
+  private var pairingServer: ConfigPairingServer? = null
+
+  fun startPairing() {
+    if (pairingServer != null) return
+    val ip = findLanIpv4()
+    if (ip == null) {
+      _pairing.value = PairingState.Failed("Connect your TV to Wi-Fi or Ethernet first.")
+      return
+    }
+    viewModelScope.launch {
+      val currentKey = settings.tmdbApiKey.first()
+      val currentAddon = settings.addonManifestUrl.first()
+      val server = ConfigPairingServer(currentKey, currentAddon) { tmdbKey, addonUrl ->
+        // Called on a server thread; hop back to persist and validate.
+        viewModelScope.launch {
+          settings.setTmdbApiKey(tmdbKey)
+          settings.setAddonManifestUrl(addonUrl)
+          _pairing.value = PairingState.Received
+          loadHomeRails(force = true)
+        }
+      }
+      runCatching { server.start() }.fold(
+        onSuccess = {
+          pairingServer = server
+          _pairing.value = PairingState.Ready("http://$ip:${server.listeningPort}/")
+        },
+        onFailure = { _pairing.value = PairingState.Failed(it.message ?: "Could not start pairing.") },
+      )
+    }
+  }
+
+  fun stopPairing() {
+    runCatching { pairingServer?.stop() }
+    pairingServer = null
+    _pairing.value = PairingState.Idle
+  }
+
+  override fun onCleared() {
+    runCatching { pairingServer?.stop() }
+    pairingServer = null
+    super.onCleared()
+  }
 
   private fun tmdb(): TmdbClient? = tmdbApiKey.value?.takeIf { it.isNotBlank() }?.let { TmdbClient(it) }
 
