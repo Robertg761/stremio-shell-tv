@@ -1,6 +1,9 @@
 package com.stremioshell.host.tv.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,19 +16,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,6 +40,7 @@ import com.stremioshell.host.tv.TvAppViewModel
 import com.stremioshell.host.tv.data.WatchEntry
 import com.stremioshell.host.tv.data.tmdb.MediaType
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
   viewModel: TvAppViewModel,
@@ -85,55 +86,43 @@ fun HomeScreen(
     return
   }
 
-  val listState = rememberLazyListState()
-  val scope = rememberCoroutineScope()
-
-  // Settle a newly focused row at a stable "focus line" ~18% down the viewport.
-  // Index-based (not offset-based) so it doesn't race the default bring-into-
-  // view: a negative scrollOffset anchors the row that far below the top.
-  fun scrollRowToFocusLine(lazyIndex: Int) {
-    val target = (listState.layoutInfo.viewportSize.height * 0.18f).toInt()
-    scope.launch {
-      // Let the default bring-into-view settle, then take over as the final
-      // scroll so the row lands on the focus line rather than the edge.
-      kotlinx.coroutines.delay(60)
-      listState.animateScrollToItem(lazyIndex, -target)
-    }
-  }
-
   LoadStateContent(
     rails,
     loadingText = "Loading catalogs...",
     onRetry = { viewModel.loadHomeRails(force = true) },
   ) { railList ->
-    val continueOffset = if (continueWatching.isNotEmpty()) 1 else 0
-    LazyColumn(
-      state = listState,
-      verticalArrangement = Arrangement.spacedBy(28.dp),
-      contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp),
-      modifier = Modifier.fillMaxSize(),
-    ) {
-      if (continueWatching.isNotEmpty()) {
-        item(key = "continue") {
-          ContinueWatchingRow(
-            continueWatching,
-            onResumeClick,
-            firstContentFocus,
-            onRowFocused = { scrollRowToFocusLine(0) },
+    // One smooth scroll that settles the focused row at a stable "focus line"
+    // ~18% down, so up/down is consistent instead of jamming rows at the edge.
+    CompositionLocalProvider(LocalBringIntoViewSpec provides FocusLineBringIntoViewSpec) {
+      LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(28.dp),
+        contentPadding = PaddingValues(top = 32.dp, bottom = 48.dp),
+        modifier = Modifier.fillMaxSize(),
+      ) {
+        if (continueWatching.isNotEmpty()) {
+          item(key = "continue") {
+            ContinueWatchingRow(continueWatching, onResumeClick, firstContentFocus)
+          }
+        }
+        items(railList.size, key = { railList[it].title }) { index ->
+          val rail = railList[index]
+          MediaRowFocusable(
+            title = rail.title,
+            items = rail.items,
+            firstCardFocus = if (index == 0 && continueWatching.isEmpty()) firstContentFocus else null,
+            onItemClick = { item -> onItemClick(item.type, item.tmdbId) },
           )
         }
       }
-      items(railList.size, key = { railList[it].title }) { index ->
-        val rail = railList[index]
-        MediaRowFocusable(
-          title = rail.title,
-          items = rail.items,
-          firstCardFocus = if (index == 0 && continueWatching.isEmpty()) firstContentFocus else null,
-          onItemClick = { item -> onItemClick(item.type, item.tmdbId) },
-          onRowFocused = { scrollRowToFocusLine(continueOffset + index) },
-        )
-      }
     }
+  }
+}
+
+/** Brings a focused row's top to a fixed line ~18% down the viewport in one scroll. */
+@OptIn(ExperimentalFoundationApi::class)
+private val FocusLineBringIntoViewSpec = object : BringIntoViewSpec {
+  override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+    return offset - containerSize * 0.18f
   }
 }
 
@@ -143,14 +132,9 @@ private fun MediaRowFocusable(
   items: List<com.stremioshell.host.tv.data.tmdb.MediaItem>,
   firstCardFocus: FocusRequester?,
   onItemClick: (com.stremioshell.host.tv.data.tmdb.MediaItem) -> Unit,
-  onRowFocused: () -> Unit,
 ) {
   if (items.isEmpty()) return
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .onFocusChanged { if (it.hasFocus) onRowFocused() },
-  ) {
+  Column(modifier = Modifier.fillMaxWidth()) {
     Text(
       text = title,
       style = MaterialTheme.typography.titleLarge,
@@ -181,9 +165,8 @@ private fun ContinueWatchingRow(
   entries: List<WatchEntry>,
   onResumeClick: (WatchEntry) -> Unit,
   firstCardFocus: FocusRequester,
-  onRowFocused: () -> Unit,
 ) {
-  Column(modifier = Modifier.onFocusChanged { if (it.hasFocus) onRowFocused() }) {
+  Column {
     Text(
       text = "Continue Watching",
       style = MaterialTheme.typography.titleLarge,

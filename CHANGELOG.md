@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.3.7] - 2026-07-20
+- Made up/down row navigation a single smooth scroll: the focused row now glides to its focus line in one motion instead of the two-step nudge-then-settle that felt choppy. (Uses Compose foundation 1.7's bring-into-view customization.)
+
 ## [0.3.6] - 2026-07-20
 - Fixed the focused poster growing over its own title (smaller focus scale plus more spacing), and made vertical navigation settle each focused row at a consistent position with the neighbouring rows peeking above and below, instead of leaving it jammed against the screen edge.
 

@@ -47,8 +47,8 @@ android {
     applicationId = "com.stremioshell.host.tv"
     minSdk = 26
     targetSdk = 34
-    versionCode = 10
-    versionName = "0.3.6"
+    versionCode = 11
+    versionName = "0.3.7"
     resValue("string", "app_name", "Stremio Shell TV")
     buildConfigField("String", "GITHUB_RELEASE_OWNER", "\"$githubReleaseOwner\"")
     buildConfigField("String", "GITHUB_RELEASE_REPO", "\"$githubReleaseRepo\"")
@@ -181,7 +181,7 @@ dependencies {
   implementation("androidx.media3:media3-ui:1.4.1")
 
   // Native Compose TV app (Comet + Real-Debrid path)
-  implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+  implementation(platform("androidx.compose:compose-bom:2024.09.00"))
   implementation("androidx.compose.ui:ui")
   implementation("androidx.compose.foundation:foundation")
   implementation("androidx.tv:tv-material:1.0.0")
