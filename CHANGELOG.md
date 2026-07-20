@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.5] - 2026-07-19
+- Added a baseline profile so the Compose UI paths (rows, cards, focus, image loading) are ahead-of-time compiled, cutting cold-start and first-interaction jank; it's embedded in the APK and installed at first run.
+- Trimmed the poster memory cache further for RAM-constrained TV hardware to reduce swap/GC pressure during navigation.
+
 ## [0.3.4] - 2026-07-19
 - Smoother navigation: posters now decode as RGB_565 with a bounded image cache, cutting memory use and the garbage-collection pauses that caused multi-hundred-millisecond freezes while moving around poster rows (99th-percentile frame time measured dropping from ~300ms to ~48ms on a Google TV Streamer). The QR code is now generated off the main thread.
 

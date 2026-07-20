@@ -16,8 +16,10 @@ class StremioTvApplication : Application(), ImageLoaderFactory {
       .allowRgb565(true)
       .crossfade(false)
       .memoryCache {
+        // This TV class runs tight on RAM; keep the poster cache modest to
+        // avoid swap/GC pressure that stalls the UI thread.
         MemoryCache.Builder(this)
-          .maxSizePercent(0.20)
+          .maxSizePercent(0.12)
           .build()
       }
       .build()

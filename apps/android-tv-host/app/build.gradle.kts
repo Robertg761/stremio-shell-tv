@@ -47,8 +47,8 @@ android {
     applicationId = "com.stremioshell.host.tv"
     minSdk = 26
     targetSdk = 34
-    versionCode = 8
-    versionName = "0.3.4"
+    versionCode = 9
+    versionName = "0.3.5"
     resValue("string", "app_name", "Stremio Shell TV")
     buildConfigField("String", "GITHUB_RELEASE_OWNER", "\"$githubReleaseOwner\"")
     buildConfigField("String", "GITHUB_RELEASE_REPO", "\"$githubReleaseRepo\"")
@@ -199,6 +199,10 @@ dependencies {
   // Phone-pairing config entry (QR + tiny on-device web form)
   implementation("com.google.zxing:core:3.5.3")
   implementation("org.nanohttpd:nanohttpd:2.3.1")
+
+  // Installs the committed baseline profile (src/main/baseline-prof.txt) at
+  // first run so the Compose UI paths are AOT-compiled. See docs for regen.
+  implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 
   testImplementation("junit:junit:4.13.2")
   testImplementation("org.json:json:20240303")
