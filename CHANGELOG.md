@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.3.9] - 2026-07-20
+- Smooth video playback: the player now detects each title's frame rate and switches the TV's display refresh rate to match it (e.g. 24Hz for 23.976/24fps film, 25/50Hz for PAL, 30/60Hz for 30fps), so motion plays with even cadence instead of the uneven 3:2-pulldown judder you get forcing 24fps film onto a fixed 60Hz panel. The display returns to its normal refresh rate when you leave the player. The current frame rate is shown in the on-screen info.
+
 ## [0.3.7] - 2026-07-20
 - Made up/down row navigation a single smooth scroll: the focused row now glides to its focus line in one motion instead of the two-step nudge-then-settle that felt choppy. (Uses Compose foundation 1.7's bring-into-view customization.)
 

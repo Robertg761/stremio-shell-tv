@@ -2,10 +2,13 @@ package com.stremioshell.host.tv.player
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.Display
 import android.view.KeyEvent
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.WindowManager
@@ -47,6 +50,11 @@ class MpvPlayerActivity : ComponentActivity() {
   private var mpvCreated = false
   private lateinit var watchStore: WatchStateStore
   private val mainHandler = Handler(Looper.getMainLooper())
+
+  // The mpv render surface and the detected content frame rate, used to retune
+  // the display refresh rate so film/PAL content plays without pulldown judder.
+  private var playbackSurface: Surface? = null
+  private var contentFps = 0f
 
   private var url = ""
   private var title = ""
@@ -99,6 +107,7 @@ class MpvPlayerActivity : ComponentActivity() {
             MPVLib.setPropertyDouble("time-pos", resumeMs / 1000.0)
           }
           refreshTrackInfo()
+          matchDisplayToContentFrameRate()
         }
       }
     }
@@ -230,17 +239,24 @@ class MpvPlayerActivity : ComponentActivity() {
     view.holder.addCallback(object : SurfaceHolder.Callback {
       override fun surfaceCreated(holder: SurfaceHolder) {
         if (!mpvCreated) return
+        playbackSurface = holder.surface
         MPVLib.attachSurface(holder.surface)
         MPVLib.setOptionString("force-window", "yes")
         MPVLib.command(arrayOf("loadfile", url))
       }
 
       override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        if (mpvCreated) MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+        if (!mpvCreated) return
+        MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+        playbackSurface = holder.surface
+        // Re-assert the frame-rate vote if we already know the content fps (the
+        // surface can be recreated, e.g. after a display-mode switch).
+        if (contentFps > 0f) applyDisplayFrameRate(contentFps)
       }
 
       override fun surfaceDestroyed(holder: SurfaceHolder) {
         if (!mpvCreated) return
+        playbackSurface = null
         MPVLib.setPropertyString("vo", "null")
         MPVLib.detachSurface()
       }
@@ -316,8 +332,90 @@ class MpvPlayerActivity : ComponentActivity() {
           "sub" -> sub = label
         }
       }
-      trackInfo.value = "Audio: $audio   |   Subtitles: $sub"
+      val fpsNote = if (contentFps > 0f) {
+        "   |   ${"%.3f".format(contentFps).trimEnd('0').trimEnd('.')} fps"
+      } else {
+        ""
+      }
+      trackInfo.value = "Audio: $audio   |   Subtitles: $sub$fpsNote"
     }
+  }
+
+  /**
+   * Reads the source frame rate from mpv and retunes the display refresh rate to
+   * match, so 23.976/24/25/30 fps content plays with even cadence instead of the
+   * uneven 3:2 pulldown you get forcing film onto a fixed 60Hz panel.
+   */
+  private fun matchDisplayToContentFrameRate() {
+    if (!mpvCreated) return
+    val fps = readContentFps()
+    if (fps <= 0f) return
+    contentFps = fps
+    applyDisplayFrameRate(fps)
+    refreshTrackInfo()
+  }
+
+  private fun readContentFps(): Float {
+    val container = MPVLib.getPropertyString("container-fps")?.toFloatOrNull()
+    if (container != null && container > 0f) return container
+    return MPVLib.getPropertyString("estimated-vf-fps")?.toFloatOrNull()?.takeIf { it > 0f } ?: 0f
+  }
+
+  private fun applyDisplayFrameRate(fps: Float) {
+    // Seamless path (API 30+): tell the compositor the source frame rate and let
+    // it pick a compatible display mode (e.g. 60Hz -> 24Hz for film).
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      playbackSurface?.let { surface ->
+        runCatching {
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            surface.setFrameRate(
+              fps,
+              Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+              Surface.CHANGE_FRAME_RATE_ALWAYS,
+            )
+          } else {
+            surface.setFrameRate(fps, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE)
+          }
+        }
+      }
+    }
+    // Hard-switch fallback: request a same-resolution mode whose refresh rate is
+    // an integer multiple of the content fps, for TVs where the surface vote
+    // alone does not retune the panel.
+    runCatching {
+      val display = currentDisplay() ?: return@runCatching
+      val mode = pickDisplayModeFor(display, fps) ?: return@runCatching
+      if (mode.modeId != display.mode.modeId) {
+        window.attributes = window.attributes.apply { preferredDisplayModeId = mode.modeId }
+      }
+    }
+  }
+
+  @Suppress("DEPRECATION")
+  private fun currentDisplay(): Display? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else windowManager.defaultDisplay
+
+  /** Best same-resolution mode whose refresh rate is an integer multiple of [fps]. */
+  private fun pickDisplayModeFor(display: Display, fps: Float): Display.Mode? {
+    val current = display.mode
+    val tolerance = 0.75f // Hz
+    var best: Display.Mode? = null
+    var bestErr = Float.MAX_VALUE
+    for (m in display.supportedModes) {
+      if (m.physicalWidth != current.physicalWidth || m.physicalHeight != current.physicalHeight) continue
+      val multiple = Math.round(m.refreshRate / fps)
+      if (multiple < 1) continue
+      val err = Math.abs(m.refreshRate - multiple * fps)
+      if (err > tolerance) continue
+      // Closest match wins; on a tie prefer the lowest refresh rate (less power/heat).
+      val better = err < bestErr - 0.01f ||
+        (Math.abs(err - bestErr) <= 0.01f && best != null && m.refreshRate < best!!.refreshRate)
+      if (best == null || better) {
+        bestErr = err
+        best = m
+      }
+    }
+    return best
   }
 
   private fun showOsd() {
